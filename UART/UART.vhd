@@ -25,7 +25,7 @@ port (
 			-- Register interface (bus slave)
 			
 			WR_DATA:	IN STD_LOGIC_VECTOR (31 DOWNTO 0);
-			RD_DATA: IN STD_LOGIC_VECTOR (31 DOWNTO 0);
+			RD_DATA: OUT STD_LOGIC_VECTOR (31 DOWNTO 0);
 			
 			ADDR:		IN	STD_LOGIC_VECTOR (1 DOWNTO 0);	-- 2 registers, 0 = TXFIFO, 1 = RXFIFO, 2 = BAUDGEN, 3 = CTRL
 			
@@ -88,12 +88,34 @@ is
 			TXD			: OUT STD_LOGIC
 		);
 	end component;
-		
+	
+	component UARTReceiver is
+		port	(
+			CLK	:	IN	STD_LOGIC;
+			nRST	:	IN STD_LOGIC;
+			
+			nRxDone	: OUT STD_LOGIC;
+			
+			rxData	: OUT STD_LOGIC_VECTOR (7 downto 0);
+			
+			stopBits 	: IN STD_LOGIC_VECTOR (1 downto 0);
+			parityBits 	: IN STD_LOGIC_VECTOR (1 downto 0);
+			
+			baudTick		: IN STD_LOGIC;
+			
+			RXD			: IN STD_LOGIC
+		);
+	end component;
+	
 	signal txfifo_wr_data : STD_LOGIC_VECTOR (7 DOWNTO 0);
 	signal txfifo_nWR 	 : STD_LOGIC := '1';
 	signal txfifo_rd_data : STD_LOGIC_VECTOR (7 DOWNTO 0);
 	signal txfifo_nRD 	 : STD_LOGIC := '1';
 	
+	signal rxfifo_wr_data : STD_LOGIC_VECTOR (7 DOWNTO 0);
+	signal rxfifo_nWR 	 : STD_LOGIC := '1';
+	signal rxfifo_rd_data : STD_LOGIC_VECTOR (7 DOWNTO 0);
+	signal rxfifo_nRD 	 : STD_LOGIC := '1';
 	
 	-- Control register 
 	
@@ -130,7 +152,8 @@ is
 	--			0							|				TX_FIFO_FULL
 	--			1							|				TX_FIFO_EMPTY
 	--			2							|				RX_FIFO_FULL
-	--			3							|				RX_FIFO_EMPY
+	--			3							|				RX_FIFO_EMPTY
+	--			4							|				RX_OVERRUN
 	
 	signal status_reg 		: STD_LOGIC_VECTOR (7 DOWNTO 0);
 	signal status_reg_next 	: STD_LOGIC_VECTOR (7 DOWNTO 0);
@@ -138,6 +161,8 @@ is
 	signal baud_tick 			: STD_LOGIC;
 	
 begin
+
+	status_reg_next(7 downto 4) <= (others => '0');
 
 	baud0: BaudRateGenerator generic map (
 										CLOCK_FREQ 	=> 50000000,
@@ -173,7 +198,32 @@ begin
 									baudTick		=> baud_tick,
 									TXD			=> TX
 								);
-									
+	
+	rxFifo0:	Fifo	generic map (
+						DEPTH => RX_FIFO_DEPTH, 
+						BITS  => 8					
+				  )
+				  port map (	CLK => CLK,
+									nRST => nRST,
+									WR_DATA => rxfifo_wr_data, 
+									n_WR => rxfifo_nWR, 
+									RD_DATA => rxfifo_rd_data, 
+									n_RD => rxfifo_nRD,
+									full => status_reg_next(2),
+									empty => status_reg_next(3)
+								);
+								
+	rx0: UARTReceiver port map	(	
+									CLK			=> CLK,
+									nRST			=> nRST,
+									nRxDone		=> rxfifo_nWR,
+									rxData		=> rxfifo_wr_data,
+									stopBits 	=> control_reg(1 downto 0),
+									parityBits 	=> control_reg(3 downto 2),
+									baudTick		=> baud_tick,
+									RXD			=> RX
+								);
+	
 	process(CLK, nRST)
 	begin
 	
@@ -195,7 +245,7 @@ begin
 		end if;	
 	end process;
 
-	process (ADDR, WR_DATA, n_WR)
+	process (ADDR, WR_DATA, n_WR, rxfifo_rd_data, n_RD, status_reg)
 	begin
 	
 		txfifo_wr_data <= (others => '0');
@@ -203,6 +253,9 @@ begin
 		
 		control_reg_next <= (others => '0');
 		control_reg_nWR <= '1';
+		
+		RD_DATA <= (others => '0');
+		rxfifo_nRD <= '1';
 	
 		case ADDR is 
 			when "00" =>	-- TX fifo
@@ -214,8 +267,18 @@ begin
 	
 				control_reg_next <= WR_DATA(7 downto 0);
 				control_reg_nWR  <= n_WR;
+				
+			when "01" => 	--	RX fifo
+			
+				RD_DATA(7 downto 0) <= rxfifo_rd_data;
+				rxfifo_nRD			  <= n_RD;
 						
+			when "11" => 	-- status register
+			
+				RD_DATA(7 downto 0) <= status_reg;
+			
 			when others =>
+			
 				null;
 				
 		end case;

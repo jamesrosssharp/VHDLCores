@@ -91,7 +91,7 @@ begin
 	
 	n_rdwr <= n_WR & n_RD;
 	
-	process (CLK, n_rdwr, rd_ptr, wr_ptr, sig_empty, sig_full, wr_ptr_succ, rd_ptr_succ)
+	process (n_rdwr, rd_ptr, wr_ptr, sig_empty, sig_full, wr_ptr_succ, rd_ptr_succ)
 	begin
 	
 		wr_ptr_next <= wr_ptr;

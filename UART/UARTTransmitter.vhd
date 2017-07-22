@@ -30,8 +30,7 @@ end UARTTransmitter;
 architecture RTL of UARTTransmitter
 is
 
-	type state_type is (idle, latchByteAndParity, startBit, txBits, txParity, txStopBits, waitForIdle );	-- first reset the core, then write a prompt char, 
-																			-- then read and echo character back
+	type state_type is (idle, latchByteAndParity, startBit, txBits, txParity, txStopBits, waitForIdle );	
 	signal state : state_type := idle;
 	signal state_next : state_type;
 	
@@ -59,7 +58,7 @@ is
 	
 begin
 
-	process (CLK, nRST, baudTick)
+	process (CLK, nRST)
 	begin
 	
 		if (nRST = '0') then
@@ -86,7 +85,7 @@ begin
 	
 	end process;
 	
-	process (CLK, tx_byte, even_parity_bit, odd_parity_bit, 
+	process (tx_byte, even_parity_bit, odd_parity_bit, 
 				tx_bit, state, txData, nTxStart, count, data_bit, baudTick, 
 				parityBits, stopBits, stop_bit_count)
 		variable parity : STD_LOGIC;

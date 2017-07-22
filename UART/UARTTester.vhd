@@ -47,7 +47,7 @@ is
 			-- Register interface (bus slave)
 			
 			WR_DATA:	IN STD_LOGIC_VECTOR (31 DOWNTO 0);
-			RD_DATA: IN STD_LOGIC_VECTOR (31 DOWNTO 0);
+			RD_DATA: OUT STD_LOGIC_VECTOR (31 DOWNTO 0);
 			
 			ADDR:		IN	STD_LOGIC_VECTOR (1 DOWNTO 0);	-- 4 registers, 0 = TXFIFO, 1 = RXFIFO, 2 = CTRL, 3 = STATUS
 			
@@ -67,11 +67,12 @@ is
 	signal wr_data_next : STD_LOGIC_VECTOR (31 DOWNTO 0);
 	
 	signal rd_reg : STD_LOGIC := '1';
+	signal rd_reg_next : STD_LOGIC := '1';
 	signal rd_data : STD_LOGIC_VECTOR (31 DOWNTO 0);
 	
 	signal n_uartRst : STD_LOGIC;
 		
-	type state_type is (reset, writeTX, readRX, echoRX);	-- first reset the core, then write a prompt char, 
+	type state_type is (reset, writeTX, pollRXFifo, echoRX);	-- first reset the core, then write a prompt char, 
 																			-- then read and echo character back
 	signal state : state_type := reset;
 	signal count : unsigned (4 DOWNTO 0) := "00000";	-- counter used as sub-state
@@ -130,20 +131,22 @@ begin
 				wr_reg  <= wr_reg_next;
 				wr_data <= wr_data_next;
 				addr    <= addr_next;
+				rd_reg  <= rd_reg_next;
 				
 		end if;
 	
 	end process;
 
-	process (state, count)
+	process (state, count, rd_data, wr_data)
 	begin
 	
 		next_state <= state;
 		next_count <= count;
 		
 		addr_next <= (others => '0');
-		wr_data_next <= (others => '0');
+		wr_data_next <= wr_data;
 		wr_reg_next  <= '1';
+		rd_reg_next <= '1';
 	
 		n_uartRst <= '1';
 	
@@ -215,13 +218,49 @@ begin
 						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('>');
 						wr_reg_next <= '0'; 
 						next_count <= "00000";
-						next_state <= readRX;
+						next_state <= pollRXFifo;
 					end case;
-			
-			when readRX =>
-				next_state <= echoRX;
+					
+			when pollRXFifo =>
+				
+				case to_integer(count) is
+					when 0 => 
+						next_count <= count + 1;
+						addr_next <= "11";
+						rd_reg_next <= '0';
+					when 1 => 
+						addr_next <= "11";
+						rd_reg_next <= '0';
+						next_count <= count + 1;	
+						if rd_data(3) = '0' then
+							next_count <= (others => '0');
+							next_state <= echoRX;
+						end if;
+					when others =>
+						next_count <= (others => '0');
+				 end case;
+				
 			when echoRX =>
-				next_state <= readRX;
+				
+				case to_integer(count) is
+					when 0 => 
+						next_count <= count + 1;
+						addr_next <= "01";
+						rd_reg_next <= '0';
+					when 1 => 
+						addr_next <= "01";
+						rd_reg_next <= '0';
+						next_count <= count + 1;	
+						wr_data_next <= rd_data;
+					when 2 =>
+						addr_next <= "00";
+						wr_reg_next <= '0';
+						next_count <= count + 1;
+					when others =>
+						next_count <= (others => '0');
+						next_state <= pollRXFifo;
+				 end case;
+				 
 		end case;
 		
 	end process;
