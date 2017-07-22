@@ -43,8 +43,8 @@ architecture RTL of Fifo is
 	signal sig_full	: STD_LOGIC;
 	signal sig_empty	: STD_LOGIC;
 	
-	signal sig_full_next	 : STD_LOGIC;
-	signal sig_empty_next : STD_LOGIC;
+	signal sig_full_next	 : STD_LOGIC := '0';
+	signal sig_empty_next : STD_LOGIC := '1';
 	
 	signal wr_en : STD_LOGIC;
 
@@ -105,28 +105,31 @@ begin
 				null;
 			when "10" => -- read
 			
-				sig_full_next <= '0';
-			
 				if (sig_empty = '0') then
-					rd_ptr_next <= rd_ptr_succ;
-				end if;
-					
-				if (sig_empty = '0' and rd_ptr_succ = wr_ptr) then
-					sig_empty_next <= '1';
-				end if;
 			
+					sig_full_next <= '0';
+					rd_ptr_next <= rd_ptr_succ;
+					
+					if (rd_ptr_succ = wr_ptr) then
+						sig_empty_next <= '1';
+					end if;
+				
+				end if;
+				
 			when "01" => -- write
 			
-				sig_empty_next <= '0';
-			
 				if (sig_full = '0') then
-					wr_ptr_next <= wr_ptr_succ;
-				end if;	
-					
-				if (sig_full = '0' and wr_ptr_succ = rd_ptr) then
-					sig_full_next <= '1';
-				end if;
+				
+					sig_empty_next <= '0';
 			
+					wr_ptr_next <= wr_ptr_succ;
+					
+					if (wr_ptr_succ = rd_ptr) then
+						sig_full_next <= '1';
+					end if;
+			
+				end if;	
+				
 			when others => -- read / write
 			
 				wr_ptr_next <= wr_ptr_succ;

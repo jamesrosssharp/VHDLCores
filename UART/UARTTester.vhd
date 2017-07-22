@@ -57,11 +57,16 @@ is
 		);
 	end component;
 		
-	signal wr_reg : STD_LOGIC := '1';
-	signal rd_reg : STD_LOGIC := '1';
+	signal wr_reg 		 : STD_LOGIC := '1';
+	signal wr_reg_next : STD_LOGIC := '1';
 	
 	signal addr   : STD_LOGIC_VECTOR (1 DOWNTO 0);
-	signal wr_data : STD_LOGIC_VECTOR (31 DOWNTO 0);
+	signal addr_next   : STD_LOGIC_VECTOR (1 DOWNTO 0);
+	
+	signal wr_data 	  : STD_LOGIC_VECTOR (31 DOWNTO 0);
+	signal wr_data_next : STD_LOGIC_VECTOR (31 DOWNTO 0);
+	
+	signal rd_reg : STD_LOGIC := '1';
 	signal rd_data : STD_LOGIC_VECTOR (31 DOWNTO 0);
 	
 	signal n_uartRst : STD_LOGIC;
@@ -121,6 +126,11 @@ begin
 		elsif (CLOCK_50'event and CLOCK_50='1') then
 				state <= next_state;
 				count <= next_count;
+				
+				wr_reg  <= wr_reg_next;
+				wr_data <= wr_data_next;
+				addr    <= addr_next;
+				
 		end if;
 	
 	end process;
@@ -131,12 +141,10 @@ begin
 		next_state <= state;
 		next_count <= count;
 		
-		addr <= (others => '0');
-		wr_data <= (others => '0');
-		wr_reg  <= '1';
+		addr_next <= (others => '0');
+		wr_data_next <= (others => '0');
+		wr_reg_next  <= '1';
 	
-		rd_reg  <= '1';
-		
 		n_uartRst <= '1';
 	
 		case state is
@@ -151,9 +159,9 @@ begin
 						 n_uartRst <= '1';
 				   when 2 =>
 						 next_count <= count + 1;
-						 addr <= "10";
-						 wr_reg <= '0';
-						 wr_data (7 DOWNTO 0) <= "10010100"; -- control reg : 115200 baud, even parity, 1 stop bits
+						 addr_next <= "10";
+						 wr_reg_next <= '0';
+						 wr_data_next (7 DOWNTO 0) <= "10010100"; -- control reg : 115200 baud, even parity, 1 stop bits
 				   when others =>
 						 next_state <= writeTX;
 						 next_count <= "00000";
@@ -163,49 +171,49 @@ begin
 				-- Write prompt (UARTTest>)
 				case to_integer(count) is
 					when 0 =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('U');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('U');
+						wr_reg_next <= '0';
 						next_count <= count + 1;
 					when 1 =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('A');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('A');
+						wr_reg_next <= '0';
 						next_count <= count + 1;
 					when 2 =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('R');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('R');
+						wr_reg_next <= '0';
 						next_count <= count + 1;
 					when 3 =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('T');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('T');
+						wr_reg_next <= '0';
 						next_count <= count + 1;
 					when 4 =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('T');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('T');
+						wr_reg_next <= '0';
 						next_count <= count + 1;
 					when 5 =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('e');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('e');
+						wr_reg_next <= '0';
 						next_count <= count + 1;
 					when 6 =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('s');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('s');
+						wr_reg_next <= '0';
 						next_count <= count + 1;
 					when 7 =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('t');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('t');
+						wr_reg_next <= '0';
 						next_count <= count + 1;
 					when others =>
-						addr <= "00";
-						wr_data <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('>');
-						wr_reg <= '0';
+						addr_next <= "00";
+						wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('>');
+						wr_reg_next <= '0'; 
 						next_count <= "00000";
 						next_state <= readRX;
 					end case;

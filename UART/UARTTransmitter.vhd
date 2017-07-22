@@ -30,7 +30,7 @@ end UARTTransmitter;
 architecture RTL of UARTTransmitter
 is
 
-	type state_type is (idle, latchByteAndParity, startBit, txBits, txParity, txStopBits );	-- first reset the core, then write a prompt char, 
+	type state_type is (idle, latchByteAndParity, startBit, txBits, txParity, txStopBits, waitForIdle );	-- first reset the core, then write a prompt char, 
 																			-- then read and echo character back
 	signal state : state_type := idle;
 	signal state_next : state_type;
@@ -53,7 +53,6 @@ is
 	signal odd_parity_bit_next  : STD_LOGIC;
 	
 	signal n_tx_done_bit			 : STD_LOGIC;
-	signal n_tx_done_bit_next		 : STD_LOGIC;
 	
 	signal tx_bit					 : STD_LOGIC;
 	signal tx_bit_next			 : STD_LOGIC;
@@ -68,7 +67,6 @@ begin
 			tx_byte <= (others => '0');
 			even_parity_bit 	<= '0';
 			odd_parity_bit 	<= '0';
-			n_tx_done_bit 		<= '1';
 			tx_bit 				<= '1';
 			count 				<= to_unsigned(0, 4);
 			data_bit				<= to_unsigned(0, 3);
@@ -79,7 +77,6 @@ begin
 			tx_byte <= tx_byte_next;
 			even_parity_bit <= even_parity_bit_next;
 			odd_parity_bit  <= odd_parity_bit_next;
-			n_tx_done_bit		 <= n_tx_done_bit_next;
 			tx_bit 			 <= tx_bit_next;
 			state				 <= state_next;
 			count				 <= count_next;
@@ -89,7 +86,7 @@ begin
 	
 	end process;
 	
-	process (CLK, tx_byte, even_parity_bit, odd_parity_bit, n_tx_done_bit, 
+	process (CLK, tx_byte, even_parity_bit, odd_parity_bit, 
 				tx_bit, state, txData, nTxStart, count, data_bit, baudTick, 
 				parityBits, stopBits, stop_bit_count)
 		variable parity : STD_LOGIC;
@@ -99,19 +96,19 @@ begin
 		tx_byte_next			<= tx_byte;
 		even_parity_bit_next <= even_parity_bit;
 		odd_parity_bit_next  <= odd_parity_bit;
-		n_tx_done_bit_next	<= '1';
 		tx_bit_next				<= tx_bit;
 		state_next				<= state;
 		count_next				<= count;
 		data_bit_next			<= data_bit;
 		stop_bit_count_next  <= stop_bit_count;
+		n_tx_done_bit			<= '1';
 	
 		case state is
 			when idle =>
 			
 				tx_bit_next <= '1';
 				
-				if nTxStart = '0' then
+				if nTxStart = '0' then	-- we wait a cycle after the tick (read from fifo) to account for delay
 					state_next <= latchByteAndParity;
 				end if;
 				
@@ -210,8 +207,9 @@ begin
 					stop_bit_count_next <= stop_bit_count + 1;
 					
 					if (stop_bit_count = terminalStopBitCount) then
-						state_next <= idle;
-						n_tx_done_bit_next <= '0';
+						state_next <= waitForIdle;
+						n_tx_done_bit <= '0';
+						count_next <= (others => '0');
 					end if;
 					
 				end if;
