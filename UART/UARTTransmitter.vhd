@@ -43,9 +43,6 @@ is
 	signal data_bit			: UNSIGNED (2 downto 0);
 	signal data_bit_next		: UNSIGNED (2 downto 0);
 	
-	signal stop_bit_count	: UNSIGNED (4 downto 0);
-	signal stop_bit_count_next	: UNSIGNED (4 downto 0);
-	
 	signal even_parity_bit 	 	 : STD_LOGIC;
 	signal odd_parity_bit 		 : STD_LOGIC;
 	signal even_parity_bit_next : STD_LOGIC;
@@ -53,7 +50,7 @@ is
 	
 	signal n_tx_done_bit			 : STD_LOGIC;
 	
-	signal tx_bit					 : STD_LOGIC;
+	signal tx_bit					 : STD_LOGIC := '1';
 	signal tx_bit_next			 : STD_LOGIC;
 	
 begin
@@ -67,10 +64,9 @@ begin
 			even_parity_bit 	<= '0';
 			odd_parity_bit 	<= '0';
 			tx_bit 				<= '1';
-			count 				<= to_unsigned(0, 4);
-			data_bit				<= to_unsigned(0, 3);
-			stop_bit_count		<= to_unsigned(0,	5);
-		
+			count 				<= (others => '0');
+			data_bit				<= (others => '0');
+			
 		elsif CLK'event and CLK = '1' then
 		
 			tx_byte <= tx_byte_next;
@@ -80,14 +76,13 @@ begin
 			state				 <= state_next;
 			count				 <= count_next;
 			data_bit			 <= data_bit_next;
-			stop_bit_count	 <= stop_bit_count_next;
 		end if;
 	
 	end process;
 	
 	process (tx_byte, even_parity_bit, odd_parity_bit, 
 				tx_bit, state, txData, nTxStart, count, data_bit, baudTick, 
-				parityBits, stopBits, stop_bit_count)
+				parityBits, stopBits)
 		variable parity : STD_LOGIC;
 		variable terminalStopBitCount : UNSIGNED (4 DOWNTO 0);
 	begin
@@ -99,7 +94,6 @@ begin
 		state_next				<= state;
 		count_next				<= count;
 		data_bit_next			<= data_bit;
-		stop_bit_count_next  <= stop_bit_count;
 		n_tx_done_bit			<= '1';
 	
 		case state is
@@ -125,7 +119,7 @@ begin
 			
 				state_next <= startBit;
 				
-				count_next <= to_unsigned(0, 4);
+				count_next <= (others => '0');
 			
 			when startBit => 
 			
@@ -135,9 +129,9 @@ begin
 					count_next  <= count + 1;
 				
 					if (count = "1111") then
-						count_next <=  to_unsigned(0, 4);
 						state_next <= txBits;
-						data_bit_next <= to_unsigned(0, 3);
+						data_bit_next <= (others => '0');
+						count_next <= (others => '0');
 					end if;
 				end if;
 				
@@ -164,7 +158,7 @@ begin
 							end case;
 						end if;
 						
-						count_next <= to_unsigned(0, 4);
+						count_next <= (others => '0');
 						
 					end if;
 				end if;
@@ -186,6 +180,7 @@ begin
 					
 					if (count = "1111") then
 						state_next <= txStopBits;
+						count_next <= (others => '0');
 					end if;
 				end if;
 	
@@ -203,9 +198,9 @@ begin
 				end case;
 				
 				if (baudTick = '1') then
-					stop_bit_count_next <= stop_bit_count + 1;
+					count_next <= count + 1;
 					
-					if (stop_bit_count = terminalStopBitCount) then
+					if (count = terminalStopBitCount) then
 						state_next <= waitForIdle;
 						n_tx_done_bit <= '0';
 						count_next <= (others => '0');

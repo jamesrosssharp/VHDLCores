@@ -22,7 +22,10 @@ entity UARTReceiver is
 		
 		baudTick		: IN STD_LOGIC;
 		
-		RXD			: IN STD_LOGIC
+		RXD			: IN STD_LOGIC;
+		
+		parityError	: OUT STD_LOGIC;
+		frameError	: OUT STD_LOGIC
 	);
 end UARTReceiver;
 
@@ -46,6 +49,13 @@ architecture RTL of UARTReceiver is
 	
 	signal stop_bit_count	: UNSIGNED (4 downto 0);
 	signal stop_bit_count_next	: UNSIGNED (4 downto 0);
+	
+	signal parity_error_bit 		: STD_LOGIC;
+	signal parity_error_bit_next 	: STD_LOGIC;
+
+	signal frame_error_bit 			: STD_LOGIC;
+	signal frame_error_bit_next 	: STD_LOGIC;
+	
 
 begin
 
@@ -60,6 +70,8 @@ begin
 			stop_bit_count		<= (others => '0');
 			rx_filter			<= (others => '0');
 			state					<= idle;
+			frame_error_bit   <= '0';
+			parity_error_bit  <= '0';
 		
 		elsif CLK'event and CLK = '1' then
 		
@@ -69,6 +81,8 @@ begin
 			data_bit			 <= data_bit_next;
 			stop_bit_count	 <= stop_bit_count_next;
 			rx_filter		 <= rx_filter_next;
+			parity_error_bit <= parity_error_bit_next;
+			frame_error_bit  <= frame_error_bit_next;
 
 		end if;
 	
@@ -76,8 +90,9 @@ begin
 	
 	
 	process (RXD, rx_byte, state, count, data_bit, stop_bit_count, 
-				baudTick, rx_filter, stopBits, parityBits)
-		variable filter : STD_LOGIC;
+				baudTick, rx_filter, stopBits, parityBits, parity_error_bit, frame_error_bit)
+		variable filter : integer;
+		variable filter_bit : STD_LOGIC;
 		variable parity : STD_LOGIC;
 		variable terminalStopBitCount : UNSIGNED (4 DOWNTO 0);
 	begin
@@ -88,8 +103,25 @@ begin
 		data_bit_next <= data_bit;
 		stop_bit_count_next <= stop_bit_count;
 		rx_filter_next <= rx_filter;
+		parity_error_bit_next <= parity_error_bit;
+		frame_error_bit_next <= frame_error_bit;
 		
 		nRXDone <= '1';
+		
+		filter := 0;
+		
+		for i in rx_filter'range loop
+			if (rx_filter(i) = '1') then
+				filter := filter + 1;
+		   end if;
+		end loop;
+		
+		if (filter > 2) then
+			filter_bit := '1';
+		else
+			filter_bit := '0';
+		end if;
+		
 	
 		case state is
 			when idle =>
@@ -98,6 +130,9 @@ begin
 				end if;
 			when startBit =>
 				
+				parity_error_bit_next <= '0';
+				frame_error_bit_next  <= '0';
+				
 				if (baudTick = '1') then 
 					count_next <= count + 1;
 					
@@ -105,16 +140,13 @@ begin
 						rx_filter_next <= rx_filter(2 downto 0) & RXD;
 					end if;
 					
-					filter := '1';
-					
-					for i in rx_filter'range loop
-						filter := filter and rx_filter(i);
-					end loop;
-					
-					if (count = "1111" and filter = '0') then
-						state_next <= rxBits;
-					else 
-						state_next <= idle;
+					if (count = "1111") then
+						if filter_bit = '0' then
+							state_next <= rxBits;
+						else 
+							frame_error_bit_next <= '1';
+							state_next <= idle;
+						end if;
 					end if;
 				end if;
 					
@@ -127,15 +159,10 @@ begin
 						rx_filter_next <= rx_filter(2 downto 0) & RXD;
 					end if;
 					
-					filter := '1';
-					
-					for i in rx_filter'range loop
-						filter := filter and rx_filter(i);
-					end loop;
 					
 					if (count = "1111") then
 						data_bit_next <= data_bit + 1;
-						rx_byte_next <=  filter & rx_byte(7 downto 1);
+						rx_byte_next <=  filter_bit & rx_byte(7 downto 1);
 						
 						if (data_bit = "111") then
 							
@@ -160,11 +187,6 @@ begin
 						rx_filter_next <= rx_filter(2 downto 0) & RXD;
 					end if;
 					
-					filter := '1';
-					
-					for i in rx_filter'range loop
-						filter := filter and rx_filter(i);
-					end loop;
 					
 					parity := '0';
 					for i in rx_byte'range loop
@@ -174,15 +196,17 @@ begin
 					if (count = "1111") then
 						case parityBits is
 								when "01" =>	-- even parity
-									if ((filter xor parity) = '0') then
+									if ((filter_bit xor parity) = '0') then
 										state_next <= rxStopBits;
 									else
+										parity_error_bit_next <= '1';
 										state_next <= idle;	-- drop the packet: parity was foobar
 									end if;
 								when "10" =>	-- odd parity
-									if ((filter xor parity) = '1') then
+									if ((filter_bit xor parity) = '1') then
 										state_next <= rxStopBits;
 									else
+										parity_error_bit_next <= '1';
 										state_next <= idle;	-- drop the packet: parity was foobar
 									end if;
 								when others =>
@@ -221,5 +245,7 @@ begin
 	end process;
 	
 	rxData <= rx_byte;
+	parityError <= parity_error_bit;
+	frameError  <= frame_error_bit;
 	
 end RTL;

@@ -41,7 +41,8 @@ is
 	
 	procedure make_serial_byte
 		(constant char : in integer;
-		 signal tx	: out std_logic) is
+		 signal tx	: out std_logic;
+		 constant parity_even : in std_logic) is
 		variable tx_char : STD_LOGIC_VECTOR (7 downto 0);
 		variable parity_bit : STD_LOGIC;
 	begin
@@ -63,7 +64,11 @@ is
 			parity_bit := parity_bit xor tx_char(i);
 		end loop;
 		
-		tx <= parity_bit;
+		if (parity_even = '1') then
+			tx <= parity_bit;
+		else
+			tx <= not parity_bit;
+		end if;
 		
 		wait for bit_period;
 		
@@ -74,6 +79,8 @@ is
 		wait for stop_period;
 		
 	end make_serial_byte;
+	
+	
 	
 begin
 
@@ -133,17 +140,35 @@ begin
 		
 		-- transmit some chars
 	
-		make_serial_byte(16#41#, RX);
+		make_serial_byte(16#41#, RX, '1');
 		
 		wait until chars_transmitted = 10;
 		
-		make_serial_byte(16#42#, RX);
+		make_serial_byte(16#42#, RX, '1');
 		
 		wait until chars_transmitted = 11;
 		
-		make_serial_byte(16#43#, RX);
+		make_serial_byte(16#43#, RX, '1');
 		
 		wait until chars_transmitted = 12;
+		
+		-- simulate bad packet / noise on the line
+		RX <= '0';
+		
+		wait for 100 ns;
+		
+		RX <= '1';
+		
+		wait for 100 us;
+		
+		-- simulate parity error
+		
+		make_serial_byte(16#44#, RX, '0');
+		
+		wait for 500 us;
+		
+		make_serial_byte(16#44#, RX, '1');
+		
 		
 		wait;
 		

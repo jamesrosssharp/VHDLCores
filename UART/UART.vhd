@@ -103,7 +103,10 @@ is
 			
 			baudTick		: IN STD_LOGIC;
 			
-			RXD			: IN STD_LOGIC
+			RXD			: IN STD_LOGIC;
+			
+			parityError	: OUT STD_LOGIC;
+			frameError	: OUT STD_LOGIC
 		);
 	end component;
 	
@@ -154,20 +157,22 @@ is
 	--			2							|				RX_FIFO_FULL
 	--			3							|				RX_FIFO_EMPTY
 	--			4							|				RX_OVERRUN
+	--			5							|				PARITY_ERROR
+	--			6							|				FRAME_ERROR
 	
 	signal status_reg 		: STD_LOGIC_VECTOR (7 DOWNTO 0);
 	signal status_reg_next 	: STD_LOGIC_VECTOR (7 DOWNTO 0);
 	
 	signal baud_tick 			: STD_LOGIC;
-	
+		
 begin
 
-	status_reg_next(7 downto 4) <= (others => '0');
+	status_reg_next(7) <= '0';
 
 	baud0: BaudRateGenerator generic map (
 										CLOCK_FREQ 	=> 50000000,
 										BITS 			=> 15,
-										FRAC_BITS 	=> 4
+										FRAC_BITS 	=> 3
 									)
 									port map (BAUDSEL => control_reg (7 DOWNTO 4), 
 												  CLK => CLK, 
@@ -221,7 +226,9 @@ begin
 									stopBits 	=> control_reg(1 downto 0),
 									parityBits 	=> control_reg(3 downto 2),
 									baudTick		=> baud_tick,
-									RXD			=> RX
+									RXD			=> RX,
+									parityError => status_reg_next(5),
+									frameError  => status_reg_next(6)
 								);
 	
 	process(CLK, nRST)
@@ -229,6 +236,7 @@ begin
 	
 		if nRST = '0' then
 			control_reg <= (others => '0');
+			status_reg  <= (1 => '1', 3 => '1', others => '0');
 		elsif CLK'event and CLK = '1' then
 	
 			-- synchronous transitions here
@@ -254,8 +262,8 @@ begin
 		control_reg_next <= (others => '0');
 		control_reg_nWR <= '1';
 		
-		RD_DATA <= (others => '0');
-		rxfifo_nRD <= '1';
+		RD_DATA 			<= (others => '0');
+		rxfifo_nRD 		<= '1';
 	
 		case ADDR is 
 			when "00" =>	-- TX fifo
@@ -284,5 +292,21 @@ begin
 		end case;
 	
 	end process;
+	
+	-- handle RX overrun
+	process (rxFifo_nWR, status_reg)
+	begin
+		status_reg_next(4) <= status_reg(4);
+		
+		if (rxFifo_nWR = '0') then -- if RX received 
+			if (status_reg(2) = '1') then -- and fifo is full
+				status_reg_next(4) <= '1';  -- RX overrun detected
+			else
+				status_reg_next(4) <= '0'; -- clear rx overrun
+			end if;	
+		end if;
+	
+	end process;
+	
 	
 end RTL;
