@@ -1,0 +1,144 @@
+--
+--		Test bench for SPIMasterLite
+--
+
+library IEEE;
+use 	  IEEE.std_logic_1164.all;
+use 	  IEEE.numeric_std.all;
+
+entity SPIMasterLite_tb is
+end 	 SPIMasterLite_tb;
+
+architecture RTL of SPIMasterLite_tb
+is
+
+	component SPIMasterLite is
+		generic (
+			CLOCK_FREQ		: real 			:= 50000000.0;
+			SPI_FREQ			: real 			:= 25000000.0;
+			BITS				: integer 	 	:= 8;
+			TX_FIFO_DEPTH	: integer 		:= 3;	-- 2**3 = 8 word FIFO
+			RX_FIFO_DEPTH	: integer 		:= 1	-- 2**1 = 2 word FIFO
+		);
+		port (
+			wr_data	: IN 	STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+			n_WR		: IN 	STD_LOGIC;
+			rd_data	: IN 	STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+			n_RD		: IN 	STD_LOGIC;
+			control  : IN 	STD_LOGIC;
+			status 	: OUT STD_LOGIC_VECTOR (3 downto 0);
+			MISO 		: IN 	STD_LOGIC;
+			MOSI 		: OUT STD_LOGIC;
+			nSS  		: OUT STD_LOGIC;
+			SCK  		: OUT STD_LOGIC;
+			CLK		: IN 	STD_LOGIC;
+			nRST		: IN 	STD_LOGIC
+		);
+	end component;
+
+	signal spi_wr_data	:	STD_LOGIC_VECTOR (7 DOWNTO 0);
+	signal spi_n_wr		:	STD_LOGIC;
+	signal spi_rd_data	:	STD_LOGIC_VECTOR (7 DOWNTO 0);
+	signal spi_n_rd		:  STD_LOGIC;
+	
+	signal control_word	:	STD_LOGIC;
+	signal status_word	:	STD_LOGIC_VECTOR (3 DOWNTO 0);
+	
+	signal miso				: 	STD_LOGIC;
+	signal mosi				:	STD_LOGIC;
+	signal slave_select	: 	STD_LOGIC;
+	signal serial_clk		:	STD_LOGIC;
+	signal main_clk		:	STD_LOGIC;
+	signal n_reset			:	STD_LOGIC;
+	
+	signal tx_data_acc		:	STD_LOGIC_VECTOR (7 DOWNTO 0);
+	signal tx_data				:	STD_LOGIC_VECTOR (7 DOWNTO 0);
+	
+	signal data_bits			: integer := 0;
+	
+	constant	clk_period : time := 0.020 us;
+begin
+
+spi0:	SPIMasterLite  port map (
+								wr_data	=> spi_wr_data,
+								n_WR		=> spi_n_wr,
+								rd_data	=> spi_rd_data,
+								n_RD		=> spi_n_rd,
+								control  => control_word,
+								status => status_word,
+								MISO  => miso,
+								MOSI 	=> mosi,
+								nSS  	=> slave_select,
+								SCK   => serial_clk,
+								CLK	=> main_clk,
+								nRST	=> n_reset
+							);
+
+-- generate clock
+
+
+	process 
+	begin
+		main_clk <= '0';
+		wait for clk_period / 2;
+		main_clk <= '1';
+		wait for clk_period / 2;
+	end process;					
+							
+							
+	process
+	begin
+			spi_wr_data <= (others => '0');
+			spi_n_wr <= '1';
+			
+			n_reset <= '1';
+			-- pulse reset
+			wait for 100 ns;		
+			n_reset <= '0';
+			wait for 100 ns;
+			n_reset <= '1';
+			
+			
+			wait until main_clk = '0';
+		
+			spi_wr_data <= std_logic_vector(to_unsigned(16#AA#, 8));
+			spi_n_wr <= '0';
+			wait for clk_period;
+			
+			spi_wr_data <= std_logic_vector(to_unsigned(16#55#, 8));
+			spi_n_wr <= '0';
+			wait for clk_period;
+		
+			spi_wr_data <= std_logic_vector(to_unsigned(16#99#, 8));
+			spi_n_wr <= '0';
+			wait for clk_period;
+			
+			spi_wr_data <= std_logic_vector(to_unsigned(16#66#, 8));
+			spi_n_wr <= '0';
+			wait for clk_period;
+	
+			spi_n_wr <= '1';
+			
+			wait for 500us;
+			
+			wait;
+
+	end process;
+	
+	process (serial_clk, mosi)
+	begin
+	
+		if rising_edge(serial_clk) then
+			tx_data_acc <=  mosi & tx_data_acc(7 downto 1);
+			data_bits <= data_bits + 1;
+		end if;
+		
+		if data_bits = 8 then
+			tx_data <= tx_data_acc;
+			data_bits <= 0;
+		end if;
+	
+	end process;
+						
+
+end RTL;
