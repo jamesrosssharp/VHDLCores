@@ -7,6 +7,9 @@ use 	  IEEE.std_logic_1164.all;
 use 	  IEEE.numeric_std.all;
 
 entity SPIMasterLite_tb is
+	generic (
+		SPI_MODE : integer := 3
+	);
 end 	 SPIMasterLite_tb;
 
 architecture RTL of SPIMasterLite_tb
@@ -18,7 +21,8 @@ is
 			SPI_FREQ			: real 			:= 25000000.0;
 			BITS				: integer 	 	:= 8;
 			TX_FIFO_DEPTH	: integer 		:= 3;	-- 2**3 = 8 word FIFO
-			RX_FIFO_DEPTH	: integer 		:= 1	-- 2**1 = 2 word FIFO
+			RX_FIFO_DEPTH	: integer 		:= 1;	-- 2**1 = 2 word FIFO
+			SPI_MODE			: integer		:= 0
 		);
 		port (
 			wr_data	: IN 	STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
@@ -59,7 +63,10 @@ is
 	constant	clk_period : time := 0.020 us;
 begin
 
-spi0:	SPIMasterLite  port map (
+spi0:	SPIMasterLite  generic map (
+								SPI_MODE => SPI_MODE
+							)
+							port map (
 								wr_data	=> spi_wr_data,
 								n_WR		=> spi_n_wr,
 								rd_data	=> spi_rd_data,
@@ -125,20 +132,37 @@ spi0:	SPIMasterLite  port map (
 
 	end process;
 	
-	process (serial_clk, mosi)
-	begin
-	
-		if rising_edge(serial_clk) then
-			tx_data_acc <=  mosi & tx_data_acc(7 downto 1);
-			data_bits <= data_bits + 1;
-		end if;
+	proc0 : if SPI_MODE = 0 or SPI_MODE = 3 generate
+		process (serial_clk, mosi, slave_select)
+		begin
+			if rising_edge(serial_clk) then
+				tx_data_acc <=  mosi & tx_data_acc(7 downto 1);
+				data_bits <= data_bits + 1;
+			end if;
+			
+			if data_bits = 8 then
+				tx_data <= tx_data_acc;
+				data_bits <= 0;
+			end if;
 		
-		if data_bits = 8 then
-			tx_data <= tx_data_acc;
-			data_bits <= 0;
-		end if;
+		end process;
+	end generate proc0;
 	
-	end process;
-						
+	proc1 : if SPI_MODE = 1 or SPI_MODE = 2 generate
+		process (serial_clk, mosi, slave_select)
+		begin
+			if falling_edge(serial_clk) then
+				tx_data_acc <=  mosi & tx_data_acc(7 downto 1);
+				data_bits <= data_bits + 1;
+			end if;
+			
+			if data_bits = 8 then
+				tx_data <= tx_data_acc;
+				data_bits <= 0;
+			end if;
+		
+		end process;
+	end generate proc1;
+		
 
 end RTL;

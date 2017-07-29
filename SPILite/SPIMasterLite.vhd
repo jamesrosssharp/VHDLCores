@@ -12,7 +12,18 @@ entity SPIMasterLite is
 		SPI_FREQ		: real := 10000000.0;
 		BITS			: integer := 8;
 		TX_FIFO_DEPTH	: integer := 3;	-- 2**3 = 8 word FIFO
-		RX_FIFO_DEPTH	: integer := 1	-- 2**1 = 2 word FIFO
+		RX_FIFO_DEPTH	: integer := 1;	-- 2**1 = 2 word FIFO
+		SPI_MODE			: integer := 0
+		
+		--
+		--			SPI Mode
+		--
+		--		SPI Mode  |  CPOL   | CPHA  
+		--		0					0			0		Clock normally low. Data captured on rising edge.
+		--		1					0			1		Clock normally low. Data captured on falling edge.
+		--		2					1			0		Clock normally high. Data captured on falling edge.
+		--		3					1			1		Clock normally high. Data captured on rising edge.
+		
 	);
 	--
 	--		Controller has a raw signal interface to make it easier to
@@ -87,7 +98,7 @@ architecture RTL of SPIMasterLite is
 	signal baud_tick			: STD_LOGIC	:= '0';
 	signal baud_count			: INTEGER 	:= 0;
 	
-	type 	 state_type is (idle, latchtx, txbits, pollTxFifo);	
+	type 	 state_type is (idle, latchtx, preTx, txbits, pollTxFifo);	
 	signal state 		: state_type := idle;
 	signal state_next : state_type;
 	
@@ -108,6 +119,45 @@ architecture RTL of SPIMasterLite is
 	
 	signal serial_status		: STD_LOGIC_VECTOR (3 DOWNTO 0);
 	
+	procedure reset_serial_clock
+		(signal serial_clk: OUT STD_LOGIC) is
+	begin
+			if (SPI_MODE = 0) or (SPI_MODE = 1) then
+				serial_clk <= '0';
+			else
+				serial_clk <= '1';
+			end if;
+	end reset_serial_clock;
+	
+	procedure do_tx
+		(signal data_bit_next	: OUT INTEGER;
+		 signal state_next		: OUT state_type;
+		 signal tx_word_next		: OUT STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+		 signal txfifo_nRD_next	: OUT STD_LOGIC;
+		 signal serial_clk_next	: OUT STD_LOGIC;
+		 signal tx_word			: IN  STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+		 signal data_bit			: IN  INTEGER;
+		 signal serial_clk		: IN  STD_LOGIC;
+		 constant clock_pol			: IN  STD_LOGIC;
+		 constant terminal_count  : IN  INTEGER
+		) is
+	begin
+	
+		if serial_clk = clock_pol then
+			data_bit_next <= data_bit + 1;
+			tx_word_next <= '0' & tx_word(BITS - 1 downto 1);
+			
+	
+			if (data_bit = terminal_count) then
+				state_next <= pollTxFifo;
+				txfifo_nRD_next <= '0';
+				reset_serial_clock(serial_clk_next);
+			end if;
+		end if;
+			
+	end do_tx;
+
+	
 begin
 
 txfifo0:	Fifo generic map (
@@ -126,7 +176,9 @@ txfifo0:	Fifo generic map (
 
 		if (nRST = '0') then
 			txfifo_nRD <= '1';
-			serial_clk <= '0';
+			
+			reset_serial_clock(serial_clk);
+			
 			serial_data <= '0';
 			data_bit <= 0;
 			tx_word <= (others => '0');
@@ -180,7 +232,9 @@ txfifo0:	Fifo generic map (
 		case state is
 			when idle =>
 				data_bit_next <= 0;
-				serial_clk_next <= '0';
+				
+				reset_serial_clock(serial_clk_next);
+				
 				serial_data_next <= '0';
 				if (serial_status(1) = '0') then
 					state_next <= latchtx;
@@ -190,10 +244,14 @@ txfifo0:	Fifo generic map (
 				serial_slave_select_next <= '0';
 
 				if (serial_status(1) = '0') then
-					state_next <= txbits;
+					state_next <= preTx;
 				else
 					state_next <= idle;
 				end if;
+			when preTx  =>
+				serial_slave_select_next <= '0';
+				serial_data_next <= tx_word(0);
+				state_next <= txbits;
 			when txbits =>
 			
 				serial_slave_select_next <= '0';
@@ -202,18 +260,24 @@ txfifo0:	Fifo generic map (
 				if baud_tick = '1' then
 					serial_clk_next <= not serial_clk;
 					
-					if serial_clk = '0' then
-						data_bit_next <= data_bit + 1;
-						tx_word_next <= '0' & tx_word(7 downto 1);
-						
-				
-						if (data_bit = BITS) then
-							state_next <= pollTxFifo;
-							txfifo_nRD_next <= '0';
-							serial_clk_next <= '0';
-						end if;
+					if SPI_MODE = 0 then
+						do_tx
+						(data_bit_next, state_next, tx_word_next, txfifo_nRD_next,
+						 serial_clk_next, tx_word, data_bit, serial_clk, '0', BITS); -- change data on rising_edge
+					elsif SPI_MODE = 1 then
+						do_tx
+						(data_bit_next, state_next, tx_word_next, txfifo_nRD_next,
+						 serial_clk_next, tx_word, data_bit, serial_clk, '1', BITS - 1); -- change data on falling_edge
+					elsif SPI_MODE = 2 then	 
+						 do_tx
+						(data_bit_next, state_next, tx_word_next, txfifo_nRD_next,
+						 serial_clk_next, tx_word, data_bit, serial_clk, '1', BITS); -- change data on falling_edge
+				   elsif SPI_MODE = 3 then
+						do_tx
+						(data_bit_next, state_next, tx_word_next, txfifo_nRD_next,
+						 serial_clk_next, tx_word, data_bit, serial_clk, '0', BITS - 1); -- change data on rising_edge
 					end if;
-					
+						
 				end if;
 				
 			when others =>
