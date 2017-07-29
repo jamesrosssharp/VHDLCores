@@ -36,7 +36,7 @@ entity SPIMasterLite is
 		n_WR		: IN STD_LOGIC;
 		
 		-- from rx fifo
-		rd_data	: IN STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+		rd_data	: OUT STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
 		n_RD		: IN STD_LOGIC;
 		
 		--			Control Input
@@ -119,6 +119,13 @@ architecture RTL of SPIMasterLite is
 	
 	signal serial_status		: STD_LOGIC_VECTOR (3 DOWNTO 0);
 	
+	signal rx_word				: STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+	signal rx_word_next		: STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+
+	signal rxfifo_nWR			: STD_LOGIC := '1';
+	signal rxfifo_nWR_next	: STD_LOGIC := '1';
+	
+	
 	procedure reset_serial_clock
 		(signal serial_clk: OUT STD_LOGIC) is
 	begin
@@ -138,12 +145,16 @@ architecture RTL of SPIMasterLite is
 		 signal tx_word			: IN  STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
 		 signal data_bit			: IN  INTEGER;
 		 signal serial_clk		: IN  STD_LOGIC;
-		 constant clock_pol			: IN  STD_LOGIC;
+		 signal rx_word			: IN STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+		 signal rx_word_next		: OUT STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
+		 signal MISO				: IN  STD_LOGIC;
+		 signal rxfifo_nWR_next : OUT STD_LOGIC;
+		 constant clock_pol		: IN  STD_LOGIC;
 		 constant terminal_count  : IN  INTEGER
 		) is
 	begin
 	
-		if serial_clk = clock_pol then
+		if serial_clk = clock_pol then	-- on given polarity (rising, falling) change tx data
 			data_bit_next <= data_bit + 1;
 			tx_word_next <= '0' & tx_word(BITS - 1 downto 1);
 			
@@ -151,8 +162,11 @@ architecture RTL of SPIMasterLite is
 			if (data_bit = terminal_count) then
 				state_next <= pollTxFifo;
 				txfifo_nRD_next <= '0';
+				rxfifo_nWR_next <= '0';
 				reset_serial_clock(serial_clk_next);
 			end if;
+		else										-- on opposite polarity (falling, rising) read rx data
+			rx_word_next <=  MISO & rx_word(BITS - 1 DOWNTO 1);
 		end if;
 			
 	end do_tx;
@@ -169,6 +183,16 @@ txfifo0:	Fifo generic map (
 								n_RD => txfifo_nRD, full => serial_status(0), 
 								empty => serial_status(1));
 
+rxfifo0:	Fifo generic map (
+							DEPTH => RX_FIFO_DEPTH,
+							BITS => BITS
+						)
+						port map (CLK => CLK, nRST => nRST, WR_DATA => rx_word, 
+								n_WR => rxfifo_nWR, RD_DATA => rd_data,
+								n_RD => n_RD, full => serial_status(2), 
+								empty => serial_status(3));
+
+								
 	-- Synchronous updates
 
 	process (CLK, nRST)	
@@ -184,14 +208,18 @@ txfifo0:	Fifo generic map (
 			tx_word <= (others => '0');
 			state <= idle;
 			serial_slave_select <= '1';
+			rx_word <= (others => '0');
+			rxfifo_nWR <= '1';
 		elsif rising_edge(CLK) then 
 			txfifo_nRD 	<= txfifo_nRD_next;
 			serial_clk 	<= serial_clk_next;
 			serial_data <= serial_data_next;
-			data_bit <= data_bit_next;
-			tx_word 	<= tx_word_next;
-			state <= state_next;
-			serial_slave_select <= serial_slave_select_next;
+			data_bit 				<= data_bit_next;
+			tx_word 					<= tx_word_next;
+			state 					<= state_next;
+			serial_slave_select  <= serial_slave_select_next;
+			rxfifo_nWR 				<= rxfifo_nWR_next;
+			rx_word    				<= rx_word_next;
 		end if;
 
 	end process;							
@@ -216,9 +244,11 @@ txfifo0:	Fifo generic map (
 
 	end process;
 
-	process (serial_status, state, data_bit, 
+	process (CLK, serial_status, state, data_bit, 
 				txfifo_nRD, tx_word, serial_clk, 
-				baud_tick, txfifo_rd_data, serial_data)
+				baud_tick, txfifo_rd_data, serial_data,
+				MISO, rx_word
+				)
 	begin
 	
 		state_next <= state;
@@ -228,6 +258,9 @@ txfifo0:	Fifo generic map (
 		tx_word_next <= tx_word;
 		serial_data_next <= serial_data;
 		serial_slave_select_next <= '1';
+		rxfifo_nWR_next <= '1';
+		rx_word_next <= rx_word;
+		
 		
 		case state is
 			when idle =>
@@ -263,19 +296,23 @@ txfifo0:	Fifo generic map (
 					if SPI_MODE = 0 then
 						do_tx
 						(data_bit_next, state_next, tx_word_next, txfifo_nRD_next,
-						 serial_clk_next, tx_word, data_bit, serial_clk, '0', BITS); -- change data on rising_edge
+						 serial_clk_next, tx_word, data_bit, serial_clk, rx_word,
+						 rx_word_next, MISO, rxfifo_nWR_next, '1', BITS - 1); -- change data on falling_edge, read data on rising_edge
 					elsif SPI_MODE = 1 then
 						do_tx
 						(data_bit_next, state_next, tx_word_next, txfifo_nRD_next,
-						 serial_clk_next, tx_word, data_bit, serial_clk, '1', BITS - 1); -- change data on falling_edge
+						 serial_clk_next, tx_word, data_bit, serial_clk, rx_word,
+						 rx_word_next, MISO, rxfifo_nWR_next, '0', BITS); -- change data on rising_edge, read data on falling edge
 					elsif SPI_MODE = 2 then	 
 						 do_tx
 						(data_bit_next, state_next, tx_word_next, txfifo_nRD_next,
-						 serial_clk_next, tx_word, data_bit, serial_clk, '1', BITS); -- change data on falling_edge
+						 serial_clk_next, tx_word, data_bit, serial_clk, rx_word,
+						 rx_word_next, MISO, rxfifo_nWR_next, '0', BITS); -- change data on rising_edge, read data on falling_edge
 				   elsif SPI_MODE = 3 then
 						do_tx
 						(data_bit_next, state_next, tx_word_next, txfifo_nRD_next,
-						 serial_clk_next, tx_word, data_bit, serial_clk, '0', BITS - 1); -- change data on rising_edge
+						 serial_clk_next, tx_word, data_bit, serial_clk, rx_word,
+						 rx_word_next, MISO, rxfifo_nWR_next, '1', BITS - 1); -- change data on falling_edge, read data on rising_edge
 					end if;
 						
 				end if;
