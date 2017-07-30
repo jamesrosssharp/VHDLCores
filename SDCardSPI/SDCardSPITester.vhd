@@ -129,24 +129,7 @@ architecture RTL of SDCardSPITester is
     return std_logic_vector is
     variable out_vector : std_logic_vector(7 downto 0);
   begin
-    case ch is
-      when '>' =>
-      out_vector := std_logic_vector (to_unsigned(character'pos('>'), 8));
-      when 'S' =>
-      out_vector := std_logic_vector (to_unsigned(character'pos('S'), 8));
-      when 'D' =>
-      out_vector := std_logic_vector (to_unsigned(character'pos('D'), 8));
-       when 'T' =>
-      out_vector := std_logic_vector (to_unsigned(character'pos('T'), 8));
-      when 'e' =>
-      out_vector := std_logic_vector (to_unsigned(character'pos('e'), 8));
-      when 's' =>
-      out_vector := std_logic_vector (to_unsigned(character'pos('s'), 8));
-      when 't' =>
-      out_vector := std_logic_vector (to_unsigned(character'pos('t'), 8));
-      when others =>
-      out_vector := std_logic_vector (to_unsigned(0, 8));
-    end case;
+    out_vector := std_logic_vector (to_unsigned(character'pos(ch), 8)); 
     return out_vector;
   end char_2_std_logic_vector;
     
@@ -224,40 +207,30 @@ begin
         case to_integer(count) is
           when 0 =>
             uart_addr_next    <= "00";
-            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('U');
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('S');
             uart_wr_reg_next  <= '0';
             next_count        <= count + 1;
           when 1 =>
             uart_addr_next    <= "00";
-            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('A');
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('D');
             uart_wr_reg_next  <= '0';
             next_count        <= count + 1;
           when 2 =>
             uart_addr_next    <= "00";
-            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('R');
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('T');
             uart_wr_reg_next  <= '0';
             next_count        <= count + 1;
           when 3 =>
             uart_addr_next    <= "00";
-            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('T');
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('e');
             uart_wr_reg_next  <= '0';
             next_count        <= count + 1;
           when 4 =>
             uart_addr_next    <= "00";
-            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('T');
-            uart_wr_reg_next  <= '0';
-            next_count        <= count + 1;
-          when 5 =>
-            uart_addr_next    <= "00";
-            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('e');
-            uart_wr_reg_next  <= '0';
-            next_count        <= count + 1;
-          when 6 =>
-            uart_addr_next    <= "00";
             uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('s');
             uart_wr_reg_next  <= '0';
             next_count        <= count + 1;
-          when 7 =>
+          when 5 =>
             uart_addr_next    <= "00";
             uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector('t');
             uart_wr_reg_next  <= '0';
