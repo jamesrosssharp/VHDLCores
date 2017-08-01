@@ -9,28 +9,28 @@ use ieee.std_logic_1164.all;
 entity UART is
 
   generic (
-    TX_FIFO_DEPTH : INTEGER := 4;       -- 2**4 = 16 depth
-    RX_FIFO_DEPTH : INTEGER := 4
+    TX_FIFO_DEPTH : integer := 4;       -- 2**4 = 16 depth
+    RX_FIFO_DEPTH : integer := 4
     );
 
   port (
 
-    TX : OUT STD_LOGIC;
-    RX : IN  STD_LOGIC;
+    TX : out std_logic;
+    RX : in  std_logic;
 
-    CLK : IN STD_LOGIC;
+    CLK : in std_logic;
 
-    nRST : IN STD_LOGIC;
+    nRST : in std_logic;
 
     -- Register interface (bus slave)
 
-    WR_DATA : IN  STD_LOGIC_VECTOR (31 DOWNTO 0);
-    RD_DATA : OUT STD_LOGIC_VECTOR (31 DOWNTO 0);
+    WR_DATA : in  std_logic_vector (31 downto 0);
+    RD_DATA : out std_logic_vector (31 downto 0);
 
-    ADDR : IN STD_LOGIC_VECTOR (1 DOWNTO 0);  -- 2 registers, 0 = TXFIFO, 1 = RXFIFO, 2 = BAUDGEN, 3 = CTRL
+    ADDR : in std_logic_vector (1 downto 0);  -- 2 registers, 0 = TXFIFO, 1 = RXFIFO, 2 = BAUDGEN, 3 = CTRL
 
-    n_WR : IN STD_LOGIC;                -- active low, write to register 
-    n_RD : IN STD_LOGIC                 -- active low, read from register
+    n_WR : in std_logic;                -- active low, write to register 
+    n_RD : in std_logic                 -- active low, read from register
 
     );
 
@@ -41,94 +41,97 @@ is
 
   component BaudRateGenerator is
     generic (
-      CLOCK_FREQ : INTEGER;
-      BITS       : INTEGER;
-      FRAC_BITS  : INTEGER
+      CLOCK_FREQ : integer;
+      BITS       : integer;
+      FRAC_BITS  : integer
       );
     port (
-      BAUDSEL : IN  STD_LOGIC_VECTOR (3 DOWNTO 0);
-      TICK    : OUT STD_LOGIC;
-      nRST    : IN  STD_LOGIC;
-      CLK     : IN  STD_LOGIC
+      BAUDSEL : in  std_logic_vector (3 downto 0);
+      TICK    : out std_logic;
+      nRST    : in  std_logic;
+      CLK     : in  std_logic
       );
   end component;
 
   component Fifo is
     generic (
-      DEPTH : INTEGER;
-      BITS  : INTEGER
+      DEPTH : integer;
+      BITS  : integer
       );
     port (
-      CLK     : IN  STD_LOGIC;
-      nRST    : IN  STD_LOGIC;
-      WR_DATA : IN  STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
-      n_WR    : IN  STD_LOGIC;
-      RD_DATA : OUT STD_LOGIC_VECTOR (BITS - 1 DOWNTO 0);
-      n_RD    : IN  STD_LOGIC;
-      full    : OUT STD_LOGIC;
-      empty   : OUT STD_LOGIC
-      ); 
+      CLK     : in  std_logic;
+      nRST    : in  std_logic;
+      WR_DATA : in  std_logic_vector (BITS - 1 downto 0);
+      n_WR    : in  std_logic;
+      RD_DATA : out std_logic_vector (BITS - 1 downto 0);
+      n_RD    : in  std_logic;
+      full    : out std_logic;
+      empty   : out std_logic
+      );
   end component;
 
   component UARTTransmitter is
     port (
-      CLK  : IN STD_LOGIC;
-      nRST : IN STD_LOGIC;
+      CLK  : in std_logic;
+      nRST : in std_logic;
 
-      nTxStart : IN  STD_LOGIC;
-      nTxDone  : OUT STD_LOGIC;
+      nTxStart : in  std_logic;
+      nTxDone  : out std_logic;
 
-      txData : IN STD_LOGIC_VECTOR (7 downto 0);
+      txData : in std_logic_vector (7 downto 0);
 
-      stopBits   : IN STD_LOGIC_VECTOR (1 downto 0);
-      parityBits : IN STD_LOGIC_VECTOR (1 downto 0);
+      stopBits   : in std_logic_vector (1 downto 0);
+      parityBits : in std_logic_vector (1 downto 0);
 
-      baudTick : IN STD_LOGIC;
+      baudTick : in std_logic;
 
-      TXD : OUT STD_LOGIC
+      TXD : out std_logic
       );
   end component;
 
   component UARTReceiver is
     port (
-      CLK  : IN STD_LOGIC;
-      nRST : IN STD_LOGIC;
+      CLK  : in std_logic;
+      nRST : in std_logic;
 
-      nRxDone : OUT STD_LOGIC;
+      nRxDone : out std_logic;
 
-      rxData : OUT STD_LOGIC_VECTOR (7 downto 0);
+      rxData : out std_logic_vector (7 downto 0);
 
-      stopBits   : IN STD_LOGIC_VECTOR (1 downto 0);
-      parityBits : IN STD_LOGIC_VECTOR (1 downto 0);
+      stopBits   : in std_logic_vector (1 downto 0);
+      parityBits : in std_logic_vector (1 downto 0);
 
-      baudTick : IN STD_LOGIC;
+      baudTick : in std_logic;
 
-      RXD : IN STD_LOGIC;
+      RXD : in std_logic;
 
-      parityError : OUT STD_LOGIC;
-      frameError  : OUT STD_LOGIC
+      parityError : out std_logic;
+      frameError  : out std_logic
       );
   end component;
 
-  signal txfifo_wr_data : STD_LOGIC_VECTOR (7 DOWNTO 0);
-  signal txfifo_nWR     : STD_LOGIC := '1';
-  signal txfifo_rd_data : STD_LOGIC_VECTOR (7 DOWNTO 0);
-  signal txfifo_nRD     : STD_LOGIC := '1';
+  signal txfifo_wr_data : std_logic_vector (7 downto 0);
+  signal txfifo_nWR     : std_logic := '1';
+  signal txfifo_rd_data : std_logic_vector (7 downto 0);
+  signal txfifo_nRD     : std_logic := '1';
 
-  signal rxfifo_wr_data : STD_LOGIC_VECTOR (7 DOWNTO 0);
-  signal rxfifo_nWR     : STD_LOGIC := '1';
-  signal rxfifo_rd_data : STD_LOGIC_VECTOR (7 DOWNTO 0);
-  signal rxfifo_nRD     : STD_LOGIC := '1';
+  signal rxfifo_wr_data : std_logic_vector (7 downto 0);
+  signal rxfifo_nWR     : std_logic := '1';
+  signal rxfifo_rd_data : std_logic_vector (7 downto 0);
+  signal rxfifo_nRD     : std_logic := '1';
 
   -- Control register 
 
-  --            Bit                                             |                               Function
+  --            Bit        |  Function
 
-  --                    0                                                       |                               N_STOP_BITS_0
-  --                    1                                                       |                               N_STOP_BITS_1    (N_STOP_BITS[1:0] : "00" : 1 stop bit, "01" 1.5 stop bits "10" 1.5 stop bits "10" 2 stop bits, "11" 1 stop bit)
-  --                    2                                                       |                               PARITY_0
-  --                    3                                                       |                               PARITY_1                                (PARITY[1:0] : "00" no parity "01" even parity "10" odd parity "11" no parity
-  --                    4, 5, 6, 7                              |                               BAUD_RATE                                       
+  --            0          |  N_STOP_BITS_0
+  --            1          |  N_STOP_BITS_1    (N_STOP_BITS[1:0] : "00" : 1 stop bit,
+  --                       |                     "01" 1.5 stop bits, "10" 1.5 stop bits
+  --                       |                     "10" 2 stop bits, "11" 1 stop bit)
+  --            2          |  PARITY_0
+  --            3          |  PARITY_1        (PARITY[1:0] : "00" no parity "01"
+  --                       |                     even parity "10" odd parity "11" no parity
+  --            4 - 7      |                               BAUD_RATE                                       
   --
   --    Baud rate generator:
   --
@@ -146,25 +149,25 @@ is
   --
   --
 
-  signal control_reg      : STD_LOGIC_VECTOR (7 DOWNTO 0);
-  signal control_reg_next : STD_LOGIC_VECTOR (7 DOWNTO 0);
-  signal control_reg_nWR  : STD_LOGIC;
+  signal control_reg      : std_logic_vector (7 downto 0);
+  signal control_reg_next : std_logic_vector (7 downto 0);
+  signal control_reg_nWR  : std_logic;
 
   --    Status register
   --
-  --                    0                                                       |                               TX_FIFO_FULL
-  --                    1                                                       |                               TX_FIFO_EMPTY
-  --                    2                                                       |                               RX_FIFO_FULL
-  --                    3                                                       |                               RX_FIFO_EMPTY
-  --                    4                                                       |                               RX_OVERRUN
-  --                    5                                                       |                               PARITY_ERROR
-  --                    6                                                       |                               FRAME_ERROR
+  --    0            |      TX_FIFO_FULL
+  --    1            |      TX_FIFO_EMPTY
+  --    2            |      RX_FIFO_FULL
+  --    3            |      RX_FIFO_EMPTY
+  --    4            |      RX_OVERRUN
+  --    5            |      PARITY_ERROR
+  --    6            |      FRAME_ERROR
 
-  signal status_reg      : STD_LOGIC_VECTOR (7 DOWNTO 0);
-  signal status_reg_next : STD_LOGIC_VECTOR (7 DOWNTO 0);
+  signal status_reg      : std_logic_vector (7 downto 0);
+  signal status_reg_next : std_logic_vector (7 downto 0);
 
-  signal baud_tick : STD_LOGIC;
-  
+  signal baud_tick : std_logic;
+
 begin
 
   status_reg_next(7) <= '0';
@@ -174,7 +177,7 @@ begin
     BITS       => 15,
     FRAC_BITS  => 3
     )
-    port map (BAUDSEL => control_reg (7 DOWNTO 4),
+    port map (BAUDSEL => control_reg (7 downto 4),
               CLK     => CLK,
               TICK    => baud_tick,
               nRST    => nRST);
@@ -183,40 +186,40 @@ begin
     DEPTH => TX_FIFO_DEPTH,  -- TX_FIFO_DEPTH deep (can set this generic to descrease area if need be)
     BITS  => 8                          -- 8 bit (1 char) width
     )
-    port map (CLK       => CLK,
-                nRST    => nRST,
-                WR_DATA => txfifo_wr_data,
-                n_WR    => txfifo_nWR,
-                RD_DATA => txfifo_rd_data,
-                n_RD    => txfifo_nRD,
-                full    => status_reg_next(0),
-                empty   => status_reg_next(1)
-                );      
+    port map (CLK     => CLK,
+              nRST    => nRST,
+              WR_DATA => txfifo_wr_data,
+              n_WR    => txfifo_nWR,
+              RD_DATA => txfifo_rd_data,
+              n_RD    => txfifo_nRD,
+              full    => status_reg_next(0),
+              empty   => status_reg_next(1)
+              );
 
-  tx0 : UARTTransmitter port map (CLK              => CLK,
-                                        nRST       => nRST,
-                                        nTxStart   => status_reg(1),
-                                        nTxDone    => txfifo_nRD,
-                                        txData     => txfifo_rd_data,
-                                        stopBits   => control_reg(1 downto 0),
-                                        parityBits => control_reg(3 downto 2),
-                                        baudTick   => baud_tick,
-                                        TXD        => TX
-                                        );
+  tx0 : UARTTransmitter port map (CLK        => CLK,
+                                  nRST       => nRST,
+                                  nTxStart   => status_reg(1),
+                                  nTxDone    => txfifo_nRD,
+                                  txData     => txfifo_rd_data,
+                                  stopBits   => control_reg(1 downto 0),
+                                  parityBits => control_reg(3 downto 2),
+                                  baudTick   => baud_tick,
+                                  TXD        => TX
+                                  );
 
   rxFifo0 : Fifo generic map (
     DEPTH => RX_FIFO_DEPTH,
     BITS  => 8
     )
-    port map (CLK       => CLK,
-                nRST    => nRST,
-                WR_DATA => rxfifo_wr_data,
-                n_WR    => rxfifo_nWR,
-                RD_DATA => rxfifo_rd_data,
-                n_RD    => rxfifo_nRD,
-                full    => status_reg_next(2),
-                empty   => status_reg_next(3)
-                );
+    port map (CLK     => CLK,
+              nRST    => nRST,
+              WR_DATA => rxfifo_wr_data,
+              n_WR    => rxfifo_nWR,
+              RD_DATA => rxfifo_rd_data,
+              n_RD    => rxfifo_nRD,
+              full    => status_reg_next(2),
+              empty   => status_reg_next(3)
+              );
 
   rx0 : UARTReceiver port map (
     CLK         => CLK,
@@ -233,14 +236,14 @@ begin
 
   process(CLK, nRST)
   begin
-    
+
     if nRST = '0' then
       control_reg <= (others => '0');
       status_reg  <= (1      => '1', 3 => '1', others => '0');
     elsif CLK'event and CLK = '1' then
 
       -- synchronous transitions here
-      
+
       if (control_reg_nWR = '0') then
         -- only bits 4 - 7 are user settable
         control_reg <= control_reg_next;
@@ -249,13 +252,13 @@ begin
       end if;
 
       status_reg <= status_reg_next;
-      
+
     end if;
   end process;
 
   process (ADDR, WR_DATA, n_WR, rxfifo_rd_data, n_RD, status_reg)
   begin
-    
+
     txfifo_wr_data <= (others => '0');
     txfifo_nWR     <= '1';
 
@@ -267,30 +270,30 @@ begin
 
     case ADDR is
       when "00" =>                      -- TX fifo
-        
+
         txfifo_wr_data <= WR_DATA(7 downto 0);
         txfifo_nWR     <= n_WR;
-        
+
       when "10" =>                      -- CTRL
-        
+
         control_reg_next <= WR_DATA(7 downto 0);
         control_reg_nWR  <= n_WR;
-        
+
       when "01" =>                      --      RX fifo
-        
+
         RD_DATA(7 downto 0) <= rxfifo_rd_data;
         rxfifo_nRD          <= n_RD;
-        
+
       when "11" =>                      -- status register
-        
+
         RD_DATA(7 downto 0) <= status_reg;
-        
+
       when others =>
-        
+
         null;
-        
+
     end case;
-    
+
   end process;
 
   -- handle RX overrun
@@ -305,8 +308,8 @@ begin
         status_reg_next(4) <= '0';      -- clear rx overrun
       end if;
     end if;
-    
+
   end process;
-  
-  
+
+
 end RTL;

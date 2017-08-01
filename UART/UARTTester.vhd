@@ -166,7 +166,10 @@ begin
             wr_reg_next               <= '0';
             wr_data_next (7 DOWNTO 0) <= "10010100";  -- control reg : 115200 baud, even parity, 1 stop bits
           when 3 =>
-            next_count <= count + 1;
+            addr_next                 <= "10";
+            wr_reg_next               <= '0';
+            wr_data_next (7 DOWNTO 0) <= "10010100";  -- control reg : 115200 baud, even parity, 1 stop bits
+				next_count <= count + 1;
           when others =>
             next_state <= writeTX;
                                         --next_state <= pollRXFifo;

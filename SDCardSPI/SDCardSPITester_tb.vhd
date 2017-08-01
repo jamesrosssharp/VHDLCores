@@ -44,18 +44,46 @@ architecture RTL of SDCardSPITester_tb is
   signal parity_bit : STD_LOGIC;
   signal tx_byte    : STD_LOGIC_VECTOR (7 downto 0);
 
-  signal tb_sd_dat  : STD_LOGIC;
-  signal tb_sd_cmd  : STD_LOGIC;
-  signal tb_sd_clk  : STD_LOGIC;
-  signal tb_sd_dat3 : STD_LOGIC;
+  signal tb_sd_dat  : STD_LOGIC := '1';
+  signal tb_sd_cmd  : STD_LOGIC := '1';
+  signal tb_sd_clk  : STD_LOGIC := '0';
+  signal tb_sd_dat3 : STD_LOGIC := 'Z';
 
   signal tb_uart_txd : STD_LOGIC;
   signal tb_uart_rxd : STD_LOGIC;
 
   signal CLK    : STD_LOGIC;
-  signal tb_key : STD_LOGIC_VECTOR (3 DOWNTO 0);
+  signal tb_key : STD_LOGIC_VECTOR (3 DOWNTO 0) := "1111";
 
   signal chars_transmitted : INTEGER := 0;
+  
+  signal spi_clks : INTEGER := 0;
+  
+  signal tb_reset_spi_clks : STD_LOGIC;
+  
+  --sent_sd_response(tb_sd_dat, tb_sd_clk, 16#ff#);
+  
+  procedure send_sd_response
+    (signal tb_sd_dat : out std_logic;
+     signal tb_sd_clk : in  std_logic;
+	  constant byte_response : in integer) is
+		variable response_byte : std_logic_vector (6 downto 0);
+  begin
+	response_byte := std_logic_vector(to_unsigned(byte_response, 7));
+	wait until tb_sd_clk = '0';
+	tb_sd_dat <= '0';
+	
+	for i in response_byte'range loop
+		wait until tb_sd_clk = '1';
+		wait until tb_sd_clk = '0';
+		tb_sd_dat <= response_byte(i);
+	end loop;
+  
+	wait until tb_sd_clk = '1';
+	wait until tb_sd_clk = '0';
+	
+	tb_sd_dat <= '1';
+  end send_sd_response;
   
 begin
 
@@ -78,6 +106,22 @@ begin
     wait for clk_period / 2;
     CLK <= '1';
     wait for clk_period / 2;
+  end process;
+
+  -- generate command responses etc.
+
+  process
+  begin
+    wait for 100 ns;
+    tb_key(0) <= '0';
+    wait for 50 ns;
+    tb_key(0) <= '1';
+    wait for 200 ns;
+    tb_sd_dat3 <= 'H';
+    -- wait for command to be sent
+	 wait until spi_clks = 250;
+	 send_sd_response(tb_sd_dat, tb_sd_clk, 16#aa#);
+    wait;
   end process;
 
   -- process TX data
@@ -108,6 +152,14 @@ begin
     
   end process;
 
+  process (tb_sd_clk, tb_reset_spi_clks)
+  begin
+	  if tb_reset_spi_clks = '1' then
+		spi_clks <= 0;
+     elsif rising_edge(tb_sd_clk) then
+		spi_clks <= spi_clks + 1;
+	  end if;
+  end process;
   
 end RTL;
 
