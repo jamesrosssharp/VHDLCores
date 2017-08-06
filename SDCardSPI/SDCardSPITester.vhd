@@ -605,7 +605,7 @@ begin
           when 1 =>                     -- write command argument to reg 2
             sd_addr_next    <= "010";
             sd_wr_reg_next  <= '0';
-            sd_wr_data_next <= (30 => '1', others => '0');      -- HCS = 1
+            sd_wr_data_next <= (30 => '1', others => '0');  -- HCS = 1
             next_count      <= count + 1;
           when 2 =>  -- write send command (write send bit of control register = 0)
             sd_addr_next    <= "000";
@@ -617,14 +617,49 @@ begin
             next_state <= processCMD41Response;
         end case;
       when processCMD41Response =>
-        next_state                         <= waitTxFifoEmpty;  -- first drain fifo,
-        return_from_wait_tx_fifo_next      <= waitForResponse;  -- then enter
+
+        case to_integer(count) is
+          -- wait for "response received" bit
+          when 0 =>
+            sd_addr_next   <= "011";    -- resp register
+            sd_rd_reg_next <= '0';
+            next_count     <= count + 1;
+          when 1 =>
+            sd_addr_next <= "011";
+            next_count   <= "00000";
+            if (sd_rd_data(3) = '1') then  -- transaction complete
+              next_count <= count + 1;
+            end if;
+            -- read response, and see if bit 0 is 1. If so, poll the card again.
+          when 2 =>
+            next_count <= count + 1;
+            sd_addr_next <= "100";
+            sd_rd_reg_next <= '0';
+          when 3 =>
+				sd_addr_next <= "100";
+				sd_rd_reg_next <= '1';
+            if (sd_rd_data(0) = '1') then
+               next_state                         <= waitTxFifoEmpty;  -- first drain fifo,
+					return_from_wait_tx_fifo_next      <= waitForResponse;  -- then enter
                                         -- response handling
                                         -- sequence
-        return_from_response_handling_next <= sendCMD17;        -- return from
+					return_from_response_handling_next <= sendCMD55;  -- return from
                                         -- response handling
                                         -- to next command
-
+					next_count                         <= "00000";
+            else
+              next_count <= count + 1;
+            end if;
+          when others =>
+            next_state                         <= waitTxFifoEmpty;  -- first drain fifo,
+            return_from_wait_tx_fifo_next      <= waitForResponse;  -- then enter
+                                        -- response handling
+                                        -- sequence
+            return_from_response_handling_next <= sendCMD17;  -- return from
+                                        -- response handling
+                                        -- to next command
+            next_count                         <= "00000";
+        end case;
       when sendCMD17 =>
         case to_integer(count) is
           when 0 =>                     -- write command (CMD8) to reg 1
@@ -666,7 +701,9 @@ begin
             next_count   <= "00000";
             if (sd_rd_data(4) = '1') then  -- transaction complete
               next_count <= count + 1;
-            end if;
+            elsif (sd_rd_data(0) = '1') then
+					next_state <= printTimedOut;
+				end if;
           -- reset ram read address
           when 2 =>
             ram_rd_addr_next <= 0;
@@ -722,11 +759,11 @@ begin
               next_state <= waitForEver;
             else
               ram_rd_addr_next <= ram_rd_addr + 1;
-              next_count <= count + 1;
+              next_count       <= count + 1;
             end if;
           -- wait for tx fifo to drain
           when others =>
-            next_state <= waitTxFifoEmpty;
+            next_state                    <= waitTxFifoEmpty;
             return_from_wait_tx_fifo_next <= printRamByte;
         end case;
 

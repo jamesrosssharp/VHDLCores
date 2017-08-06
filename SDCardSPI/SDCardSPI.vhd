@@ -152,9 +152,20 @@ architecture RTL of SDCardSPI is
   --            4               |       1 = transaction complete (for block /
   --                            |           multiblock commands)
   --            5               |       1 = invalid command
+  --            6               |       1 = transaction error
 
-  signal status_register      : std_logic_vector (5 downto 0) := (others => '0');
-  signal status_register_next : std_logic_vector (5 downto 0) := (others => '0');
+  constant STATUS_REG_RESPONSE_TIMED_OUT_BIT   : integer := 0;
+  constant STATUS_REG_CARD_INSERTED_BIT        : integer := 1;
+  constant STATUS_REG_CARD_REMOVED_BIT         : integer := 2;
+  constant STATUS_REG_RESPONSE_RECEIVED_BIT    : integer := 3;
+  constant STATUS_REG_TRANSACTION_COMPLETE_BIT : integer := 4;
+  constant STATUS_REG_INVALID_COMMAND_BIT      : integer := 5;
+  constant STATUS_REG_TRANSACTION_ERROR_BIT    : integer := 6;
+
+  constant STATUS_REG_BITS : integer := 7;
+
+  signal status_register      : std_logic_vector (STATUS_REG_BITS - 1 downto 0) := (others => '0');
+  signal status_register_next : std_logic_vector (STATUS_REG_BITS - 1 downto 0) := (others => '0');
 
 
   --
@@ -213,6 +224,13 @@ architecture RTL of SDCardSPI is
   signal crc_holding_reg_next : std_logic_vector (6 downto 0) := (others => '0');
 
   --
+  --    Holding register for token
+  --
+
+  signal token_holding_reg      : std_logic_vector (7 downto 0) := (others => '0');
+  signal token_holding_reg_next : std_logic_vector (7 downto 0) := (others => '0');
+
+  --
   --    SPI signals
   --
 
@@ -224,6 +242,13 @@ architecture RTL of SDCardSPI is
 
   signal sd_spi_cs      : std_logic := '1';
   signal sd_spi_cs_next : std_logic := '1';
+
+  --
+  --    Byte count for multibyte transfers
+  --
+
+  signal byte_count      : natural range 0 to 2048 := 0;
+  signal byte_count_next : natural range 0 to 2048 := 0;
 
   --
   --    CRC7 signals
@@ -248,7 +273,11 @@ begin
 
   -- drive SD_DAT3 when not in idle
 
-  SD_DAT3 <= 'Z' when state = idle or state = checkCard else sd_spi_cs;
+  SD_DAT3 <= 'Z' when (state = idle or
+                       state = checkCard or
+                       state = cardInserted or
+                       state = waitCommand)
+             else sd_spi_cs;
 
   SD_CMD <= sd_spi_mosi;
   SD_CLK <= sd_spi_clk;
@@ -284,6 +313,10 @@ begin
       return_from_response_state <= idle;
       handle_response_state      <= idle;
 
+      token_holding_reg <= (others => '0');
+
+      byte_count <= 0;
+
     elsif (CLK'event and CLK = '1') then
 
       state           <= next_state;
@@ -304,6 +337,10 @@ begin
 
       handle_response_state      <= handle_response_state_next;
       return_from_response_state <= return_from_response_state_next;
+
+      token_holding_reg <= token_holding_reg_next;
+
+      byte_count <= byte_count_next;
 
       -- register writes
 
@@ -379,7 +416,7 @@ begin
            command_register, command_argument_register, command_holding_reg,
            crc_holding_reg, command_count, baud_tick, SD_DAT, sd_spi_clk, sd_spi_mosi,
            crc7_n_WR, crc7_din, crc7_crc, command_response_register, command_response_register2,
-           handle_response_state, return_from_response_state)
+           handle_response_state, return_from_response_state, token_holding_reg, byte_count)
     variable conv_vector : unsigned (1 downto 0);
   begin
 
@@ -405,50 +442,65 @@ begin
     command_response_register_next  <= command_response_register;
     command_response_register2_next <= command_response_register2;
 
+    token_holding_reg_next <= token_holding_reg;
+
+    byte_count_next <= byte_count;
+	 
+	 dm_wr_data <= (others => '0');
+	 dm_n_WR <= '1';
+	 
     case state is
       when idle =>
-        command_count_next <= 0;
-        sd_spi_clk_next    <= '0';
-        sd_spi_mosi_next   <= '1';
+        command_count_next                <= 0;
+        sd_spi_clk_next                   <= '0';
+        sd_spi_mosi_next                  <= '1';
+        control_register_internal_next(0) <= '0';  -- clear "perform command"
+                                                   -- bit, in case it has been
+                                        -- set before card is even inserted
         if (SD_DAT3 = '1' or SD_DAT3 = 'H') then
           next_state <= cardInserted;
         end if;
-      when cardInserted =>               -- do we need this state?
-        status_register_next(1) <= '1';  -- card inserted set to high
-        status_register_next(2) <= '0';  -- card removed set to low
-        next_state              <= waitCommand;
+      when cardInserted =>              -- do we need this state?
+        status_register_next(STATUS_REG_CARD_INSERTED_BIT) <= '1';  -- card inserted set to high
+        status_register_next(STATUS_REG_CARD_REMOVED_BIT)  <= '0';  -- card removed set to low
+        next_state                                         <= waitCommand;
       when waitCommand =>
 
+        --if (SD_DAT3 = 'L' or SD_DAT3 = '0') then  -- if card removed
+        --  next_state                                        <= idle;
+        --  status_register_next(STATUS_REG_CARD_REMOVED_BIT) <= '1';
         if (control_register(0) = '1') then
           control_register_internal_next(0) <= '0';
           command_holding_reg_next          <= "01" & command_register & command_argument_register;
 
-          next_state              <= performCommand;
-          command_count_next      <= 0;
-          status_register_next(0) <= '0';  -- clear timed out
-          status_register_next(3) <= '0';  -- clear response received
-          status_register_next(4) <= '0';  -- clear transaction complete
-          status_register_next(5) <= '0';  -- clear invalid command
-          crc7_nRST               <= '0';
+          next_state                                                <= performCommand;
+          command_count_next                                        <= 0;
+          status_register_next(STATUS_REG_RESPONSE_TIMED_OUT_BIT)   <= '0';  -- clear timed out
+          status_register_next(STATUS_REG_RESPONSE_RECEIVED_BIT)    <= '0';  -- clear response received
+          status_register_next(STATUS_REG_TRANSACTION_COMPLETE_BIT) <= '0';  -- clear transaction complete
+          status_register_next(STATUS_REG_INVALID_COMMAND_BIT)      <= '0';  -- clear invalid command
+          status_register_next(STATUS_REG_TRANSACTION_ERROR_BIT)    <= '0';  -- clear
+                                        -- transaction error
+          crc7_nRST                                                 <= '0';
 
-          -- we don't bother clearing the response registers - these may
-          -- contain invalid data depending on whether the response was
-          -- received etc.
+          command_response_register_next  <= (others => '0');
+          command_response_register2_next <= (others => '0');
 
           -- decide which response is expected
 
           case to_integer(unsigned(command_register)) is
             when 0 | 55 | 41 =>
-              handle_response_state_next <= receive1ByteResponse;
-              return_from_response_state_next <= checkCard;  
+              handle_response_state_next      <= receive1ByteResponse;
+              return_from_response_state_next <= checkCard;
             when 8 | 58 =>
-              handle_response_state_next <= receive5ByteResponse;
-              return_from_response_state_next <= checkCard;  
+              handle_response_state_next      <= receive5ByteResponse;
+              return_from_response_state_next <= checkCard;
             when 17 =>
-              handle_response_state_next <= receive1ByteResponse;
+              handle_response_state_next      <= receive1ByteResponse;
               return_from_response_state_next <= receiveDataBlocks;
             when others =>
-              next_state <= waitCommand;
+              status_register_next(5) <= '1';  -- invalid command
+              next_state              <= waitCommand;
           end case;
 
         end if;
@@ -491,7 +543,7 @@ begin
             sd_spi_mosi_next <= '1';
 
           elsif (command_count = 1022) then
-
+            command_count_next      <= 0;
             next_state              <= checkCard;
             status_register_next(0) <= '1';  -- timed out
 
@@ -520,10 +572,12 @@ begin
             end if;
           elsif (command_count < 1022) then
             if SD_DAT = '1' then               -- the response has completed
+              command_count_next      <= 0;
               next_state              <= return_from_response_state;
               status_register_next(3) <= '1';  -- response received
             end if;
           else
+            command_count_next      <= 0;
             next_state              <= checkCard;
             status_register_next(0) <= '1';    -- timed out
           end if;
@@ -551,16 +605,128 @@ begin
             end if;
           elsif (command_count < 1022) then
             if SD_DAT = '1' then               -- response has been received
+              command_count_next      <= 0;
               next_state              <= return_from_response_state;
               status_register_next(3) <= '1';  -- response received
             end if;
           else
+            command_count_next      <= 0;
             next_state              <= checkCard;
             status_register_next(0) <= '1';    -- timed out
           end if;
 
         end if;
+      when receiveDataBlocks =>
+        sd_spi_cs_next <= '0';
 
+        case to_integer(unsigned(command_register)) is
+          when 17 =>
+            command_count_next <= 0;
+            next_state         <= waitForRXDataToken;
+            token_holding_reg_next <= "10101010"; -- this pattern is necessary
+                                             -- because it doesn't correspond
+                                             -- to any token, so we can differentiate
+                                             -- when we have received a valid token
+            
+          -- we don't handle multiple block reads yet.
+          -- if we do decide to handle them, we need to be able to send
+          -- CMD12 to stop the transaction when we
+          -- need to terminate the read. This is a little tricky so we
+          -- don't handle the case yet.
+          --when 18 =>
+          --  if control_register(31 downto 3) = (others => '0') then
+          --    status_register_next(STATUS_REG_TRANSACTION_COMPLETE_BIT) <= '1';
+          --    next_state                                                <= checkCard;
+          --    command_count_next                                        <= 0;
+          --  else
+          --    control_register_internal_next(31 downto 3) <=
+          --      std_logic_vector(unsigned(control_register(31 downto 3)) - 1);
+          --    next_state         <= receiveByte;
+          --    command_count_next <= 0;
+          --    next_state <= waitForRXDataToken;
+          --  end if;
+          when others =>
+            status_register_next(STATUS_REG_INVALID_COMMAND_BIT) <= '1';
+            next_state                                           <= checkCard;
+        end case;
+      when waitForRXDataToken =>
+        -- wait to receive "11111110" (start of data) or "000xxxxx" (error)
+        sd_spi_cs_next <= '0';
+
+        if baud_tick = '1' then
+
+          command_count_next <= command_count + 1;
+
+          conv_vector     := to_unsigned(command_count mod 2, 2);
+          sd_spi_clk_next <= conv_vector(0);
+
+          -- check if we received a token
+          if (token_holding_reg = "11111110") then
+            command_count_next <= 0;
+            next_state         <= receiveByte;
+				byte_count_next    <= 0;
+			elsif (token_holding_reg(7 downto 5) = "000") then
+            status_register_next(STATUS_REG_TRANSACTION_ERROR_BIT) <= '1';
+            command_count_next                                <= 0;
+            next_state                                        <= checkCard;
+          end if;
+
+          if (command_count < 1022) then
+            if (conv_vector(0) = '0') then
+              token_holding_reg_next <= token_holding_reg(6 downto 0) & SD_DAT;
+            end if;
+          else
+            command_count_next                                      <= 0;
+            next_state                                              <= checkCard;
+            status_register_next(STATUS_REG_RESPONSE_TIMED_OUT_BIT) <= '1';  -- timed out
+          end if;
+
+        end if;
+      when receiveByte =>
+
+        sd_spi_cs_next <= '0';
+
+        -- if we have received all bytes, advance to check if card is still connected
+
+        if (byte_count = 512) then
+          status_register_next(STATUS_REG_TRANSACTION_COMPLETE_BIT) <= '1';
+          next_state                                                <= idle;
+        elsif baud_tick = '1' then
+
+          command_count_next <= command_count + 1;
+
+          conv_vector     := to_unsigned(command_count mod 2, 2);
+          sd_spi_clk_next <= conv_vector(0);
+
+          if (command_count < 8*2 - 1) then
+            if (conv_vector(0) = '0') then
+              token_holding_reg_next <= token_holding_reg(6 downto 0) & SD_DAT;
+            end if;
+          else
+            next_state <= writeByteToMemory;
+            byte_count_next <= byte_count + 1;
+            command_count_next <= 0;
+          end if;
+        end if;
+      when writeByteToMemory =>
+
+		  sd_spi_cs_next <= '0';
+
+        case command_count is
+          when 0 =>
+            command_count_next <= command_count + 1;
+            dm_wr_data <= token_holding_reg;
+            dm_n_WR <= '1';
+          when 1 =>
+			   command_count_next <= command_count + 1;
+            dm_wr_data <= token_holding_reg;
+            dm_n_WR <= '0';
+			 when others =>
+            dm_wr_data <= token_holding_reg;
+            dm_n_WR <= '1';
+            command_count_next <= 0;
+            next_state <= receiveByte;
+        end case;
       when checkCard =>
         case command_count is
           when 0 =>                     -- dummy tick to let DAT3 settle
@@ -568,7 +734,7 @@ begin
           when 1 =>
             next_state <= idle;
             if (SD_DAT3 = '0' or SD_DAT3 = 'L') then
-              status_register_next(2) <= '1';
+              status_register_next(STATUS_REG_CARD_REMOVED_BIT) <= '1';
             end if;
           when others =>
             command_count_next <= 0;
@@ -580,7 +746,7 @@ begin
 
   end process;
 
-  -- register reads
+-- register reads
 
   process (addr, control_register, command_register, command_argument_register,
            status_register, command_response_register, command_response_register2)
@@ -597,7 +763,7 @@ begin
       when 2 =>                         -- Command argument register
         rd_data <= command_argument_register;
       when 3 =>                         -- Status register
-        rd_data(5 downto 0) <= status_register;
+        rd_data(STATUS_REG_BITS - 1 downto 0) <= status_register;
       when 4 =>                         -- Command response register 1
         rd_data(7 downto 0) <= command_response_register;
       when 5 =>                         -- Command response register 2

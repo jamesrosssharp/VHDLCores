@@ -117,6 +117,37 @@ architecture RTL of SDCardSPITester_tb is
     tb_sd_dat <= '1';
   end send_sd_response2;
 
+  procedure send_data
+    (signal tb_sd_dat       : inout std_logic;
+     signal tb_sd_clk       : in  std_logic
+      ) is
+		variable data_byte : std_logic_vector (7 downto 0);
+  begin
+  
+    -- send token
+	 
+	 tb_sd_dat <= '1';
+	
+	 for i in 0 to 6 loop	
+	  wait until tb_sd_clk = '1';
+     wait until tb_sd_clk = '0';
+	 end loop;
+     
+	 tb_sd_dat <= '0';
+	  
+    for i in 0 to 511 loop
+	   data_byte := std_logic_vector(to_unsigned(i, 8));
+	   for j in 0 to 7 loop
+			wait until tb_sd_clk = '1';
+			wait until tb_sd_clk = '0';
+			tb_sd_dat <= data_byte(7 - j); -- flip bit ordering (MSB first)
+		end loop;
+    end loop;
+	 
+	 tb_sd_dat <= '1';
+
+  end send_data;
+
 begin
 
   sd0 : SDCardSPITester
@@ -183,13 +214,32 @@ begin
     send_sd_response(tb_sd_dat, tb_sd_clk, 16#01#);  -- CMD41
     wait until tb_sd_dat3 = 'H';
 
-    --tb_reset_spi_clks <= '1';
-    --wait for 10ns;
-    --tb_reset_spi_clks <= '0';
-    --wait until spi_clks = 457;
-    --send_sd_response(tb_sd_dat, tb_sd_clk, 16#01#); -- CMD17
-    --send_data(tb_sd_dat, tb_sd_clk);
+    tb_reset_spi_clks <= '1';
+    wait for 10ns;
+    tb_reset_spi_clks <= '0';
+    wait until spi_clks = 126;
+    send_sd_response(tb_sd_dat, tb_sd_clk, 16#00#);  -- CMD55
+    wait until tb_sd_dat3 = 'H';
 
+    tb_reset_spi_clks <= '1';
+    wait for 10ns;
+    tb_reset_spi_clks <= '0';
+    wait until spi_clks = 223;
+    send_sd_response(tb_sd_dat, tb_sd_clk, 16#00#);  -- CMD41
+    wait until tb_sd_dat3 = 'H';
+
+    tb_reset_spi_clks <= '1';
+    wait for 10ns;
+    tb_reset_spi_clks <= '0';
+    wait until spi_clks = 97;
+    send_sd_response(tb_sd_dat, tb_sd_clk, 16#01#); -- CMD17
+    wait until spi_clks = 253;
+    send_data(tb_sd_dat, tb_sd_clk);
+
+    wait for 20us;
+
+    tb_sd_dat3 <= 'L';
+    
     wait;
   end process;
 
