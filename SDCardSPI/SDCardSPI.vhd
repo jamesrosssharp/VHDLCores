@@ -54,11 +54,34 @@ architecture RTL of SDCardSPI is
   end component;
 
   type state_type is (idle, cardInserted, waitCommand,
-                      performCommand, receiveResponse,
-                      commandTimedOut);
+                      performCommand, receive1ByteResponse,
+                      receive5ByteResponse,
+
+                      receiveDataBlocks, waitForRXDataToken,
+                      receiveByte, writeByteToMemory,
+
+                      checkCard);
+  -- state "checkCard" allows us to sample the DAT3 input when cs is no longer
+  -- driving to determine if the card is still inserted or not.
 
   signal state      : state_type := idle;
-  signal next_state : state_type;
+  signal next_state : state_type := idle;
+
+  signal handle_response_state      : state_type := idle;  -- state which will
+                                                           -- handle the
+                                                           -- response is
+                                                           -- selected when
+                                                           -- "send command" is
+                                                           -- asserted
+  signal handle_response_state_next : state_type := idle;
+
+  signal return_from_response_state : state_type := idle;  -- we also select
+                                                           -- the state to
+                                                           -- return to when
+                                                           -- we've processed
+                                                           -- the response
+
+  signal return_from_response_state_next : state_type := idle;
 
   -- registers
 
@@ -126,9 +149,12 @@ architecture RTL of SDCardSPI is
   --            1               |       1 = card inserted
   --            2               |       1 = card removed
   --            3               |       1 = response received
+  --            4               |       1 = transaction complete (for block /
+  --                            |           multiblock commands)
+  --            5               |       1 = invalid command
 
-  signal status_register      : std_logic_vector (3 downto 0) := (others => '0');
-  signal status_register_next : std_logic_vector (3 downto 0) := (others => '0');
+  signal status_register      : std_logic_vector (5 downto 0) := (others => '0');
+  signal status_register_next : std_logic_vector (5 downto 0) := (others => '0');
 
 
   --
@@ -222,7 +248,7 @@ begin
 
   -- drive SD_DAT3 when not in idle
 
-  SD_DAT3 <= 'Z' when state = idle else sd_spi_cs;
+  SD_DAT3 <= 'Z' when state = idle or state = checkCard else sd_spi_cs;
 
   SD_CMD <= sd_spi_mosi;
   SD_CLK <= sd_spi_clk;
@@ -255,6 +281,9 @@ begin
       crc7_din  <= '0';
       crc7_n_WR <= '1';
 
+      return_from_response_state <= idle;
+      handle_response_state      <= idle;
+
     elsif (CLK'event and CLK = '1') then
 
       state           <= next_state;
@@ -272,6 +301,9 @@ begin
 
       command_response_register  <= command_response_register_next;
       command_response_register2 <= command_response_register2_next;
+
+      handle_response_state      <= handle_response_state_next;
+      return_from_response_state <= return_from_response_state_next;
 
       -- register writes
 
@@ -346,7 +378,8 @@ begin
   process (state, SD_DAT3, control_register, status_register,
            command_register, command_argument_register, command_holding_reg,
            crc_holding_reg, command_count, baud_tick, SD_DAT, sd_spi_clk, sd_spi_mosi,
-           crc7_n_WR, crc7_din, crc7_crc, command_response_register, command_response_register2)
+           crc7_n_WR, crc7_din, crc7_crc, command_response_register, command_response_register2,
+           handle_response_state, return_from_response_state)
     variable conv_vector : unsigned (1 downto 0);
   begin
 
@@ -361,6 +394,9 @@ begin
 
     command_holding_reg_next <= command_holding_reg;
     crc_holding_reg_next     <= crc_holding_reg;
+
+    handle_response_state_next      <= handle_response_state;
+    return_from_response_state_next <= return_from_response_state;
 
     crc7_n_WR_next <= '1';
     crc7_din_next  <= crc7_din;
@@ -377,19 +413,43 @@ begin
         if (SD_DAT3 = '1' or SD_DAT3 = 'H') then
           next_state <= cardInserted;
         end if;
-      when cardInserted =>              -- do we need this state?
-        status_register_next(1) <= '1';
+      when cardInserted =>               -- do we need this state?
+        status_register_next(1) <= '1';  -- card inserted set to high
+        status_register_next(2) <= '0';  -- card removed set to low
         next_state              <= waitCommand;
       when waitCommand =>
 
         if (control_register(0) = '1') then
           control_register_internal_next(0) <= '0';
           command_holding_reg_next          <= "01" & command_register & command_argument_register;
-          next_state                        <= performCommand;
-          command_count_next                <= 0;
-          status_register_next(0)           <= '0';  -- clear timed out
-          status_register_next(3)           <= '0';  -- clear response received
-          crc7_nRST                         <= '0';
+
+          next_state              <= performCommand;
+          command_count_next      <= 0;
+          status_register_next(0) <= '0';  -- clear timed out
+          status_register_next(3) <= '0';  -- clear response received
+          status_register_next(4) <= '0';  -- clear transaction complete
+          status_register_next(5) <= '0';  -- clear invalid command
+          crc7_nRST               <= '0';
+
+          -- we don't bother clearing the response registers - these may
+          -- contain invalid data depending on whether the response was
+          -- received etc.
+
+          -- decide which response is expected
+
+          case to_integer(unsigned(command_register)) is
+            when 0 | 55 | 41 =>
+              handle_response_state_next <= receive1ByteResponse;
+              return_from_response_state_next <= checkCard;  
+            when 8 | 58 =>
+              handle_response_state_next <= receive5ByteResponse;
+              return_from_response_state_next <= checkCard;  
+            when 17 =>
+              handle_response_state_next <= receive1ByteResponse;
+              return_from_response_state_next <= receiveDataBlocks;
+            when others =>
+              next_state <= waitCommand;
+          end case;
 
         end if;
 
@@ -432,19 +492,45 @@ begin
 
           elsif (command_count = 1022) then
 
-            next_state              <= idle;
+            next_state              <= checkCard;
             status_register_next(0) <= '1';  -- timed out
 
           else                          -- wait for response
             if SD_DAT = '0' then
               command_count_next <= 0;
-              next_state         <= receiveResponse;
+              next_state         <= handle_response_state;
             end if;
           end if;
 
         end if;
 
-      when receiveResponse =>
+      when receive1ByteResponse =>
+        sd_spi_cs_next <= '0';
+
+        if baud_tick = '1' then
+
+          command_count_next <= command_count + 1;
+
+          conv_vector     := to_unsigned(command_count mod 2, 2);
+          sd_spi_clk_next <= conv_vector(0);
+
+          if (command_count < 8*2 - 1) then
+            if (conv_vector(0) = '0') then
+              command_response_register_next <= command_response_register(6 downto 0) & SD_DAT;
+            end if;
+          elsif (command_count < 1022) then
+            if SD_DAT = '1' then               -- the response has completed
+              next_state              <= return_from_response_state;
+              status_register_next(3) <= '1';  -- response received
+            end if;
+          else
+            next_state              <= checkCard;
+            status_register_next(0) <= '1';    -- timed out
+          end if;
+
+        end if;
+
+      when receive5ByteResponse =>
 
         sd_spi_cs_next <= '0';
 
@@ -464,16 +550,29 @@ begin
               command_response_register2_next <= command_response_register2(30 downto 0) & SD_DAT;
             end if;
           elsif (command_count < 1022) then
-            if SD_DAT = '1' then
-              next_state              <= idle;
-              status_register_next(3) <= '1';
+            if SD_DAT = '1' then               -- response has been received
+              next_state              <= return_from_response_state;
+              status_register_next(3) <= '1';  -- response received
             end if;
           else
-            next_state              <= idle;
-            status_register_next(0) <= '1';  -- timed out
+            next_state              <= checkCard;
+            status_register_next(0) <= '1';    -- timed out
           end if;
 
         end if;
+
+      when checkCard =>
+        case command_count is
+          when 0 =>                     -- dummy tick to let DAT3 settle
+            command_count_next <= command_count + 1;
+          when 1 =>
+            next_state <= idle;
+            if (SD_DAT3 = '0' or SD_DAT3 = 'L') then
+              status_register_next(2) <= '1';
+            end if;
+          when others =>
+            command_count_next <= 0;
+        end case;
 
       when others =>
         next_state <= idle;
@@ -498,7 +597,7 @@ begin
       when 2 =>                         -- Command argument register
         rd_data <= command_argument_register;
       when 3 =>                         -- Status register
-        rd_data(3 downto 0) <= status_register;
+        rd_data(5 downto 0) <= status_register;
       when 4 =>                         -- Command response register 1
         rd_data(7 downto 0) <= command_response_register;
       when 5 =>                         -- Command response register 2

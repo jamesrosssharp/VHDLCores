@@ -101,6 +101,26 @@ architecture RTL of SDCardSPITester is
       );
   end component;
 
+  -- altera ram template
+
+  component simple_dual_port_ram_single_clock is
+    generic
+      (
+        DATA_WIDTH : natural := 8;
+        ADDR_WIDTH : natural := 6
+        );
+
+    port
+      (
+        clk   : in  std_logic;
+        raddr : in  natural range 0 to 2**ADDR_WIDTH - 1;
+        waddr : in  natural range 0 to 2**ADDR_WIDTH - 1;
+        data  : in  std_logic_vector((DATA_WIDTH-1) downto 0);
+        we    : in  std_logic := '1';
+        q     : out std_logic_vector((DATA_WIDTH -1) downto 0)
+        );
+  end component;
+
   signal uart_wr_reg      : std_logic := '1';
   signal uart_wr_reg_next : std_logic := '1';
 
@@ -131,6 +151,7 @@ architecture RTL of SDCardSPITester is
 
   signal sd_dm_wr_data : std_logic_vector (7 downto 0);
   signal sd_dm_n_WR    : std_logic;
+  signal sd_dm_WR      : std_logic;  -- altera ram template uses inverted logic
 
   signal n_sdRst : std_logic := '1';
 
@@ -139,7 +160,8 @@ architecture RTL of SDCardSPITester is
                       printResponseByte, printResponseWord, printNewLine, waitTxFifoEmpty,
                       printTimedOut,
                       sendCMD8, processCMD8Response, sendCMD58, processCMD58Response,
-                      sendCMD55, processCMD55Response, sendCMD41, processACMD41Response, sendCMD17);
+                      sendCMD55, processCMD55Response, sendCMD41, processCMD41Response,
+                      sendCMD17, processCMD17Response, printRamByte, waitForEver);
 
   signal state : state_type            := reset;
   signal count : unsigned (4 downto 0) := "00000";  -- counter used as sub-state
@@ -160,6 +182,20 @@ architecture RTL of SDCardSPITester is
 
   signal cur_command      : std_logic_vector (7 downto 0);
   signal cur_command_next : std_logic_vector (7 downto 0);
+
+  -- ram read data and address for retrieving bytes from RAM
+
+  signal ram_rd_addr      : natural range 0 to 2**9 - 1 := 0;  -- 512 bytes of RAM (4k bits)
+  signal ram_rd_addr_next : natural range 0 to 2**9 - 1 := 0;
+
+  signal ram_wr_addr      : natural range 0 to 2**9 - 1 := 0;
+  signal ram_wr_addr_next : natural range 0 to 2**9 - 1 := 0;
+
+  signal ram_reset_addr : std_logic := '0';  -- so the ram addresses can be reset
+
+  signal ram_rd_data : std_logic_vector (7 downto 0);  -- byte width
+
+  -- a more readable reset signal than KEY(0)
 
   signal nRESET : std_logic := '1';
 
@@ -248,6 +284,23 @@ begin
       dm_n_WR    => sd_dm_n_WR
       );
 
+  sd_dm_WR <= not sd_dm_n_WR;
+
+  ram0 : simple_dual_port_ram_single_clock
+    generic map
+    (
+      DATA_WIDTH => 8,
+      ADDR_WIDTH => 9
+      )
+    port map
+    (
+      clk   => CLOCK_50,
+      raddr => ram_rd_addr,
+      waddr => ram_wr_addr,
+      data  => sd_dm_wr_data,
+      we    => sd_dm_WR,
+      q     => ram_rd_data
+      );
 
   nRESET <= KEY(0);
 
@@ -263,6 +316,8 @@ begin
       return_from_response_handling <= reset;
       return_from_wait_tx_fifo      <= reset;
       cur_command                   <= (others => '0');
+      ram_rd_addr                   <= 0;
+      ram_wr_addr                   <= 0;
     elsif (CLOCK_50'event and CLOCK_50 = '1') then
       state                         <= next_state;
       count                         <= next_count;
@@ -277,13 +332,34 @@ begin
       return_from_response_handling <= return_from_response_handling_next;
       return_from_wait_tx_fifo      <= return_from_wait_tx_fifo_next;
       cur_command                   <= cur_command_next;
+      ram_rd_addr                   <= ram_rd_addr_next;
+      ram_wr_addr                   <= ram_wr_addr_next;
     end if;
 
   end process;
 
+  -- ram address handling
+
+  process (sd_dm_n_WR, ram_wr_addr, ram_reset_addr)
+  begin
+    ram_wr_addr_next <= ram_wr_addr;
+
+    if (ram_reset_addr = '1') then
+      ram_wr_addr_next <= 0;
+    elsif sd_dm_n_WR = '0' then
+      if (ram_wr_addr = 511) then       -- to hack around altera template using
+        -- natural type...
+        ram_wr_addr_next <= 0;
+      else
+        ram_wr_addr_next <= ram_wr_addr + 1;
+      end if;
+    end if;
+
+  end process;
 
   process (state, count, uart_rd_data, uart_wr_data, sd_wr_data,
-           sd_rd_data, cur_command, return_from_response_handling, return_from_wait_tx_fifo)
+           sd_rd_data, cur_command, return_from_response_handling, return_from_wait_tx_fifo,
+           ram_rd_addr)
   begin
     next_state        <= state;
     next_count        <= count;
@@ -298,6 +374,9 @@ begin
     sd_wr_reg_next  <= '1';
     sd_rd_reg_next  <= '1';
     sd_addr_next    <= (others => '0');
+
+    ram_rd_addr_next <= ram_rd_addr;
+    ram_reset_addr   <= '0';
 
     cur_command_next                   <= cur_command;
     return_from_response_handling_next <= return_from_response_handling;
@@ -321,7 +400,7 @@ begin
             uart_addr_next                 <= "10";
             uart_wr_reg_next               <= '0';
             uart_wr_data_next (7 downto 0) <= "10010100";  -- control reg : 115200 baud, even parity, 1 stop bits
-				next_count <= count + 1;
+            next_count                     <= count + 1;
           when others =>
             next_state <= writeBanner;
             next_count <= "00000";
@@ -389,8 +468,8 @@ begin
             sd_wr_data_next <= (others => '0');
             next_count      <= count + 1;
             cur_command_next <=
-              std_logic_vector(to_unsigned(0, 8));  -- save command so we can
-                                                    -- print it 
+              std_logic_vector(to_unsigned(0, 8));   -- save command so we can
+                                                     -- print it 
           when 1 =>                     -- write command argument to reg 2
             sd_addr_next    <= "010";
             sd_wr_reg_next  <= '0';
@@ -421,14 +500,14 @@ begin
             sd_wr_data_next <= (3 => '1', others => '0');
             next_count      <= count + 1;
             cur_command_next <=
-              std_logic_vector(to_unsigned(8, 8));  -- save command so we can
-                                                    -- print it 
+              std_logic_vector(to_unsigned(8, 8));   -- save command so we can
+                                                     -- print it 
           when 1 =>                     -- write command argument to reg 2
             sd_addr_next    <= "010";
             sd_wr_reg_next  <= '0';
             sd_wr_data_next <= "00000000000000000000000110101010";
             next_count      <= count + 1;
-			 when 2 =>  -- write send command (write send bit of control register = 0)
+          when 2 =>  -- write send command (write send bit of control register = 0)
             sd_addr_next    <= "000";
             sd_wr_reg_next  <= '0';
             sd_wr_data_next <= (0 => '1', others => '0');
@@ -442,10 +521,10 @@ begin
         return_from_wait_tx_fifo_next      <= waitForResponse;  -- then enter
                                         -- response handling
                                         -- sequence
-        return_from_response_handling_next <= sendCMD58;    -- return from
+        return_from_response_handling_next <= sendCMD58;   -- return from
                                                            -- response handling
-                                                           -- to next command																	   
-		when sendCMD58 =>
+                                                           -- to next command
+      when sendCMD58 =>
         case to_integer(count) is
           when 0 =>                     -- write command (CMD8) to reg 1
             sd_addr_next    <= "001";
@@ -454,7 +533,7 @@ begin
             next_count      <= count + 1;
             cur_command_next <=
               std_logic_vector(to_unsigned(58, 8));  -- save command so we can
-                                                    -- print it 
+                                                     -- print it 
           when 1 =>                     -- write command argument to reg 2
             sd_addr_next    <= "010";
             sd_wr_reg_next  <= '0';
@@ -474,11 +553,183 @@ begin
         return_from_wait_tx_fifo_next      <= waitForResponse;  -- then enter
                                         -- response handling
                                         -- sequence
-        return_from_response_handling_next <= sendCMD55;    -- return from
+        return_from_response_handling_next <= sendCMD55;   -- return from
                                                            -- response handling
                                                            -- to next command
 
-																			  
+
+      when sendCMD55 =>
+        case to_integer(count) is
+          when 0 =>                     -- write command (CMD8) to reg 1
+            sd_addr_next    <= "001";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= std_logic_vector(to_unsigned(55, 32));
+            next_count      <= count + 1;
+            cur_command_next <=
+              std_logic_vector(to_unsigned(55, 8));  -- save command so we can
+                                                     -- print it 
+          when 1 =>                     -- write command argument to reg 2
+            sd_addr_next    <= "010";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= (others => '0');
+            next_count      <= count + 1;
+          when 2 =>  -- write send command (write send bit of control register = 0)
+            sd_addr_next    <= "000";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= (0 => '1', others => '0');
+            next_count      <= count + 1;
+          when others =>
+            next_count <= "00000";
+            next_state <= processCMD55Response;
+        end case;
+      when processCMD55Response =>
+        next_state                         <= waitTxFifoEmpty;  -- first drain fifo,
+        return_from_wait_tx_fifo_next      <= waitForResponse;  -- then enter
+                                        -- response handling
+                                        -- sequence
+        return_from_response_handling_next <= sendCMD41;        -- return from
+                                        -- response handling
+                                        -- to next command
+
+
+      when sendCMD41 =>
+        case to_integer(count) is
+          when 0 =>                     -- write command (CMD8) to reg 1
+            sd_addr_next    <= "001";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= std_logic_vector(to_unsigned(41, 32));
+            next_count      <= count + 1;
+            cur_command_next <=
+              std_logic_vector(to_unsigned(41, 8));  -- save command so we can
+                                                     -- print it 
+          when 1 =>                     -- write command argument to reg 2
+            sd_addr_next    <= "010";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= (30 => '1', others => '0');      -- HCS = 1
+            next_count      <= count + 1;
+          when 2 =>  -- write send command (write send bit of control register = 0)
+            sd_addr_next    <= "000";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= (0 => '1', others => '0');
+            next_count      <= count + 1;
+          when others =>
+            next_count <= "00000";
+            next_state <= processCMD41Response;
+        end case;
+      when processCMD41Response =>
+        next_state                         <= waitTxFifoEmpty;  -- first drain fifo,
+        return_from_wait_tx_fifo_next      <= waitForResponse;  -- then enter
+                                        -- response handling
+                                        -- sequence
+        return_from_response_handling_next <= sendCMD17;        -- return from
+                                        -- response handling
+                                        -- to next command
+
+      when sendCMD17 =>
+        case to_integer(count) is
+          when 0 =>                     -- write command (CMD8) to reg 1
+            sd_addr_next    <= "001";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= std_logic_vector(to_unsigned(17, 32));
+            next_count      <= count + 1;
+            cur_command_next <=
+              std_logic_vector(to_unsigned(17, 8));  -- save command so we can
+                                                     -- print it 
+          when 1 =>                     -- write command argument to reg 2
+            sd_addr_next    <= "010";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= (others => '0');      -- read block at block /
+                                                     -- byte offset 0
+            next_count      <= count + 1;
+          when 2 =>
+            next_count     <= count + 1;
+            ram_reset_addr <= '1';
+          when 3 =>  -- write send command (write send bit of control register = 0)
+            sd_addr_next    <= "000";
+            sd_wr_reg_next  <= '0';
+            sd_wr_data_next <= (0 => '1', others => '0');
+            next_count      <= count + 1;
+          when others =>
+            next_count <= "00000";
+            next_state <= processCMD17Response;
+        end case;
+      when processCMD17Response =>
+
+        case to_integer(count) is
+          -- wait for "transaction complete" bit
+          when 0 =>
+            sd_addr_next   <= "011";    -- status register
+            sd_rd_reg_next <= '0';
+            next_count     <= count + 1;
+          when 1 =>
+            sd_addr_next <= "011";
+            next_count   <= "00000";
+            if (sd_rd_data(4) = '1') then  -- transaction complete
+              next_count <= count + 1;
+            end if;
+          -- reset ram read address
+          when 2 =>
+            ram_rd_addr_next <= 0;
+            next_count       <= count + 1;
+          when others =>
+            next_state                         <= waitTxFifoEmpty;  -- first drain fifo,
+            return_from_wait_tx_fifo_next      <= waitForResponse;  -- then enter
+                                        -- response handling
+                                        -- sequence
+            return_from_response_handling_next <= printRamByte;  -- return from
+                                        -- response handling
+                                        -- to next command
+            next_count                         <= "00000";
+        end case;
+      when printRamByte =>
+        case to_integer(count) is
+          -- if ram_read_addr % 16 == 0, print new lines
+          when 0 =>
+            next_count <= count + 1;
+            if (ram_rd_addr mod 16 /= 0) then
+              next_count <= "00011";
+            end if;
+          when 1 =>
+            uart_addr_next    <= "00";
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector(cr);
+            uart_wr_reg_next  <= '0';
+            next_count        <= count + 1;
+          when 2 =>
+            uart_addr_next    <= "00";
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector(lf);
+            uart_wr_reg_next  <= '0';
+            next_count        <= count + 1;
+          -- print out current byte
+          when 3 =>
+            uart_addr_next    <= "00";
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & nibble_2_ascii_hex(ram_rd_data(7 downto 4));
+            uart_wr_reg_next  <= '0';
+            next_count        <= count + 1;
+          when 4 =>
+            uart_addr_next    <= "00";
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & nibble_2_ascii_hex(ram_rd_data(3 downto 0));
+            uart_wr_reg_next  <= '0';
+            next_count        <= count + 1;
+          when 5 =>
+            uart_addr_next    <= "00";
+            uart_wr_data_next <= std_logic_vector(to_unsigned(0, 24)) & char_2_std_logic_vector(' ');
+            uart_wr_reg_next  <= '0';
+            next_count        <= count + 1;
+          -- increment ram read addr, or go to next state
+          when 6 =>
+            if (ram_rd_addr = 511) then
+              next_count <= "00000";
+              next_state <= waitForEver;
+            else
+              ram_rd_addr_next <= ram_rd_addr + 1;
+              next_count <= count + 1;
+            end if;
+          -- wait for tx fifo to drain
+          when others =>
+            next_state <= waitTxFifoEmpty;
+            return_from_wait_tx_fifo_next <= printRamByte;
+        end case;
+
       when waitForResponse =>
         -- wait for previous command response
         case to_integer(count) is
