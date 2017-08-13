@@ -9,7 +9,7 @@ use IEEE.numeric_std.all;
 entity PicoBrain is
   port (
     address       : out std_logic_vector (9 downto 0);
-    instruction   : in  std_logic_vector (18 downto 0);
+    instruction   : in  std_logic_vector (17 downto 0);
     port_id       : out std_logic_vector (7 downto 0);
     write_strobe  : out std_logic;
     out_port      : out std_logic_vector (7 downto 0);
@@ -103,6 +103,9 @@ architecture RTL of PicoBrain is
 
   signal scratchpad_ram_addr                         : unsigned (5 downto 0);
   signal callstack_ram_addr, callstack_ram_addr_next : unsigned (5 downto 0);
+  
+  signal ram_addr_a : natural range 0 to 127;
+  signal ram_addr_b : natural range 0 to 127;
 
   signal scratchpad_ram_data_in, scratchpad_ram_data_out : std_logic_vector(9 downto 0);
   signal callstack_ram_data_in, callstack_ram_data_out   : std_logic_vector(9 downto 0);
@@ -127,11 +130,15 @@ begin
   -- combined ram for callstack and scratchpad.
   -- port a: scratchpad
   -- port b: callstack
+  
+  ram_addr_a <= to_integer('0' & scratchpad_ram_addr);
+  ram_addr_b <= to_integer('1' & callstack_ram_addr);
+  
   ram0 : picobrain_dual_port_ram port map
     (
       clk    => clk,
-      addr_a => to_integer('0' & scratchpad_ram_addr),
-      addr_b => to_integer('1' & callstack_ram_addr),
+      addr_a => ram_addr_a,
+      addr_b => ram_addr_b,
       data_a => scratchpad_ram_data_in,
       data_b => callstack_ram_data_in,
       we_a   => wr_scratchpad,
@@ -405,7 +412,7 @@ begin
           zero := zero and (not result(i));
         end loop;
 
-      when "11" =>                      -- TEST
+      when others =>                      -- TEST
         result  := op_a;
         result2 := op_a and op_b;
 
@@ -487,7 +494,6 @@ begin
 
     -- assign defaults
     fc_op          <= "000";
-    fc_call_return <= FC_NOP;
     current_op     <= NOP;
     interrupt_op   <= INTERRUPT_NOP;
     alu_op         <= "111";
@@ -498,9 +504,12 @@ begin
     case cycle is
       when fetch =>
         cycle_next <= decode;
-
+		  fc_call_return <= FC_NOP;
+    
       when decode =>
         cycle_next <= fetch;
+		  fc_call_return <= FC_INC;
+    
         case instruction(17 downto 14) is
           when "0000" =>                -- load
             current_op <= OP_LOAD;
