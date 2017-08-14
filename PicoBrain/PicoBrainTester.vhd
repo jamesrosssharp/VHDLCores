@@ -205,6 +205,9 @@ begin
   uart_n_RD <= not port_rd_strobe when
                to_integer(unsigned(port_id)) = 1 or
                to_integer(unsigned(port_id)) = 2;
+					
+  port_data_in <= uart_rd_data(7 downto 0) when to_integer(unsigned(port_id)) = 2 else
+					"ZZZZZZZZ";
 
 end RTL;
 

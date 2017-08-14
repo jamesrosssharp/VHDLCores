@@ -1,0 +1,15 @@
+
+START:
+	LOAD 	s0, 0x41
+	OUTPUT  s0, 0x00
+
+	LOAD	s0, 0x42
+	OUTPUT  s0, 0x00
+
+POLL:
+	INPUT	s1, 0x02
+	TEST	s1, 0x02
+	JUMP 	 Z, POLL	
+
+
+	JUMP	START	

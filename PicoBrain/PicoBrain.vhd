@@ -451,7 +451,15 @@ begin
   process (pc, fc_call_return, fc_op, callstack_top, aaa, Z, C)
     variable fc_cond      : std_logic;
     variable next_address : natural range 0 to 1023;
+	 variable inc_address  : natural range 0 to 1023;
   begin
+  
+    if pc = 1023 then
+       inc_address := 0;
+    else
+       inc_address := pc + 1;
+    end if;
+
 
     case fc_call_return is
       when FC_CALL =>
@@ -463,12 +471,7 @@ begin
       when FC_INC =>
 
                                         -- need to wrap PC, it is natural type.
-        if pc = 1023 then
-          next_address := 0;
-        else
-          next_address := pc + 1;
-        end if;
-
+		  next_address := inc_address;
         callstack_op <= CALLSTACK_NOP;
       when FC_RETURN =>
         next_address := to_integer(unsigned(callstack_top));
@@ -494,7 +497,7 @@ begin
     if fc_cond = '1' then
       pc_next <= next_address;
     else
-      pc_next <= pc;
+      pc_next <= inc_address;
     end if;
 
   end process;
