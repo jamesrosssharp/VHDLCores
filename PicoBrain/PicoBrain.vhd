@@ -60,7 +60,7 @@ architecture RTL of PicoBrain is
   signal cycle, cycle_next : state_t := fetch;
 
   -- current op
-  type op_t is (OP_ALU, OP_SHIFT, OP_LOGIC, OP_LOAD, OP_FETCH, OP_STORE, NOP);
+  type op_t is (OP_ALU, OP_SHIFT, OP_LOGIC, OP_LOAD, OP_FETCH, OP_STORE, OP_OUTPUT, OP_INPUT, NOP);
   signal current_op : op_t;
 
   -- interrupt op
@@ -172,7 +172,19 @@ begin
             logical_out                         when current_op = OP_LOGIC else
             scratchpad_ram_data_out(7 downto 0) when current_op = OP_FETCH else
             op_b                                when current_op = OP_LOAD else
+            in_port                             when current_op = OP_INPUT else
             op_a;
+
+  -- output port & strobes
+
+  out_port <= op_a when current_op = OP_OUTPUT else
+              "ZZZZZZZZ";
+
+  port_id <= op_b when current_op = OP_OUTPUT or current_op = OP_INPUT else
+             "ZZZZZZZZ";
+
+  read_strobe <= '1' when current_op = OP_INPUT else '0';
+  write_strobe <= '1' when current_op = OP_OUTPUT else '0';
 
   -- multiplex next carry
   C_next <= alu_C_next when current_op = OP_ALU else
@@ -517,7 +529,11 @@ begin
           when "0001" =>                -- input, fetch
             case instruction (13 downto 12) is
               when "00" =>              -- INPUT,"sX,pp"
+                op_b_sel  <= OP_B_SEL_LITERAL;
+                current_op <= OP_INPUT;
               when "01" =>              -- INPUT,"sX,(sY)"
+                op_b_sel <= OP_B_SEL_REGISTER;
+                current_op <= OP_INPUT;
               when "10" =>              -- FETCH,"sX,kk"
                 op_b_sel   <= OP_B_SEL_LITERAL;
                 current_op <= OP_FETCH;
@@ -565,13 +581,19 @@ begin
           when "1000" =>                -- shift / rotate
             current_op <= OP_SHIFT;
             shift_op <= instruction(3 downto 0);
-          when "1001" =>                -- return
+          when "1001" => 
+			   null;
+			when "1010" => -- return
             fc_call_return <= FC_RETURN;
             fc_op <= instruction(12 downto 10);
-          when "1010" =>                -- output / store
+		    when "1011" =>                -- output / store
             case instruction(13 downto 12) is
               when "00" =>              -- OUTPUT sX, pp
+                op_b_sel <= OP_B_SEL_LITERAL;
+                current_op <= OP_OUTPUT;
               when "01" =>              -- OUTPUT sX, (sY)
+                op_b_sel <= OP_B_SEL_REGISTER;
+                current_op <= OP_OUTPUT;
               when "10" =>              -- STORE  sX, ss
                 op_b_sel <= OP_B_SEL_LITERAL;
                 current_op <= OP_STORE;
@@ -580,8 +602,6 @@ begin
                 current_op <= OP_STORE;
               when others =>
             end case;
-          when "1011" =>                -- not used?
-            null;
           when "1100" =>                -- call
             fc_call_return <= FC_CALL;
             fc_op <= instruction(12 downto 10);

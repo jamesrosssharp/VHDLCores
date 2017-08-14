@@ -15,7 +15,7 @@ is
 
   component PicoBrainTester is
     generic (
-      ROM_SEL : natural := 0           -- select which test rom to instantiate
+      ROM_SEL : natural := 1          -- select which test rom to instantiate
       );
     port (
       UART_TXD : out std_logic;
@@ -51,13 +51,22 @@ is
 
   constant clk_period : time := 0.020 us;
 
+  constant bit_period : time := 8680.5 ns;
+
+  constant stop_period     : time    := 8680.5 ns;
+  signal tx_byte           : std_logic_vector (7 downto 0);
+  signal chars_transmitted : integer := 0;
+
+
   signal tb_clk : std_logic;
   signal tb_key : std_logic_vector (3 downto 0) := "1111";
-  
+
+  signal tb_txd : std_logic;
+
 begin
 
   pbt0 : PicoBrainTester port map (
-    UART_TXD => open,
+    UART_TXD => tb_txd,
     UART_RXD => '1',
     CLOCK_50 => tb_clk,
     KEY      => tb_key,
@@ -86,6 +95,30 @@ begin
     tb_key(0) <= '1';
     wait for 10 ms;
   end process;
+
+  -- process serial data
+  process
+    variable tx_byte_var : std_logic_vector (7 downto 0);
+  begin
+
+    wait until tb_txd = '0';
+    tx_byte_var := (others => '0');
+
+    for i in tx_byte'reverse_range loop
+      wait for bit_period;
+      tx_byte_var(i) := tb_txd;
+    end loop;
+
+    -- stop bit
+
+    wait for stop_period;
+
+    tx_byte <= tx_byte_var;
+
+    chars_transmitted <= chars_transmitted + 1;
+
+  end process;
+
 
 
 end RTL;

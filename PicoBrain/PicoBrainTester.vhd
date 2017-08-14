@@ -8,7 +8,8 @@ use IEEE.numeric_std.all;
 
 entity PicoBrainTester is
   generic (
-    ROM_SEL : natural := 0            -- select which test rom to instantiate
+    ROM_SEL    : natural := 1;         -- select which test rom to instantiate
+    CLOCK_FREQ : integer := 50000000
     );
   port (
     UART_TXD : out std_logic;
@@ -75,43 +76,135 @@ architecture RTL of PicoBrainTester is
 
   end component;
 
+  component test_rom_2 is
+
+    port
+      (
+        clk  : in  std_logic;
+        addr : in  natural range 0 to 1023;
+        q    : out std_logic_vector(17 downto 0)
+        );
+
+  end component;
+
+  
+  -- UARTLite
+
+  component UARTLite is
+    generic (
+      TX_FIFO_DEPTH : integer := 2;
+      RX_FIFO_DEPTH : integer := 2;
+      BAUD_RATE     : integer := 115200;
+      CLOCK_FREQ    : integer := CLOCK_FREQ
+      );
+    port (
+      TX      : out std_logic;
+      RX      : in  std_logic;
+      CLK     : in  std_logic;
+      nRST    : in  std_logic;
+      WR_DATA : in  std_logic_vector (31 downto 0);
+      RD_DATA : out std_logic_vector (31 downto 0);
+      ADDR    : in  std_logic_vector (1 downto 0);
+      n_WR    : in  std_logic;
+      n_RD    : in  std_logic
+      );
+  end component;
+
   -- signals
 
-  signal rom_addr : std_logic_vector(9 downto 0);
+  signal rom_addr     : std_logic_vector(9 downto 0);
   signal rom_addr_nat : natural range 0 to 1023;
-  signal rom_data : std_logic_vector(17 downto 0);
-  
-  signal reset : std_logic := '0';
+  signal rom_data     : std_logic_vector(17 downto 0);
+
+  signal reset, n_reset : std_logic := '0';
+
+  signal uart_wr_data, uart_rd_data : std_logic_vector(31 downto 0);
+  signal uart_addr                  : std_logic_vector (1 downto 0);
+  signal uart_n_WR, uart_n_RD       : std_logic;
+
+  signal port_id, port_data_out, port_data_in : std_logic_vector(7 downto 0);
+  signal port_wr_strobe, port_rd_strobe       : std_logic;
 
 begin
 
-  reset <= not KEY(0);
+  reset        <= not KEY(0);
+  n_reset      <= KEY(0);
   rom_addr_nat <= to_integer(unsigned(rom_addr));
 
   rom0 : if ROM_SEL = 0 generate
-    testrom1: 
-    test_rom_1
-      port map (
-        clk  => CLOCK_50,
-        addr => rom_addr_nat,
-        q    => rom_data
-        );
+    testrom1 :
+      test_rom_1
+        port map (
+          clk  => CLOCK_50,
+          addr => rom_addr_nat,
+          q    => rom_data
+          );
   end generate rom0;
+
+  rom1 : if ROM_SEL = 1 generate
+    testrom2 :
+      test_rom_2
+        port map (
+          clk  => CLOCK_50,
+          addr => rom_addr_nat,
+          q    => rom_data
+          );
+  end generate rom1;
+
+  
+  uart0 : UARTLite
+    port map (
+      TX      => UART_TXD,
+      RX      => UART_RXD,
+      CLK     => CLOCK_50,
+      nRST    => n_reset,
+      WR_DATA => uart_wr_data,
+      RD_DATA => uart_rd_data,
+      ADDR    => uart_addr,
+      n_WR    => uart_n_WR,
+      n_RD    => uart_n_RD
+      );
 
   pb0 : PicoBrain
     port map (
       address       => rom_addr,
       instruction   => rom_data,
-      port_id       => open,
-      write_strobe  => open,
-      out_port      => open,
-      read_strobe   => open,
-      in_port       => (others => '0'),
+      port_id       => port_id,
+      write_strobe  => port_wr_strobe,
+      out_port      => port_data_out,
+      read_strobe   => port_rd_strobe,
+      in_port       => port_data_in,
       interrupt     => '0',
       interrupt_ack => open,
       reset         => reset,
       clk           => CLOCK_50
       );
+
+  --
+  --  Picoblaze ports:
+  --  0 = UART TXD       - wo
+  --  1 = UART RXD       - ro
+  --  2 = UART Status    - ro
+  --  3 = HEX0           - wo
+  --  4 = HEX1           - wo
+  --  5 = HEX2           - wo
+  --  6 = HEX3           - wo
+  --  7 = SW0            - ro
+  --  8 = SW1            - ro
+  --  9 = GREENLED       - wo
+  -- 10 = REDLED0        - wo
+  -- 11 = REDLED1        - wo
+
+  uart_wr_data(7 downto 0) <= port_data_out;
+  uart_n_WR                <= not port_wr_strobe when to_integer(unsigned(port_id)) = 0;
+
+  uart_addr <= "00" when to_integer(unsigned(port_id)) = 0 else
+               "01" when to_integer(unsigned(port_id)) = 1 else
+               "11";
+
+  uart_n_RD <= not port_rd_strobe when
+               to_integer(unsigned(port_id)) = 1 or
+               to_integer(unsigned(port_id)) = 2;
 
 end RTL;
 

@@ -4,13 +4,17 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
 
 entity UARTLite is
 
   generic (
     TX_FIFO_DEPTH : INTEGER := 2;       -- 2**2 = 16 depth
-    RX_FIFO_DEPTH : INTEGER := 2
+    RX_FIFO_DEPTH : INTEGER := 2;
+	 BAUD_RATE 	   : INTEGER := 115200;
+	 CLOCK_FREQ 	: INTEGER := 50000000;
+	 BAUD_BITS 		: INTEGER := 5
     );
 
   port (
@@ -126,15 +130,15 @@ is
   signal status_reg_next : STD_LOGIC_VECTOR (7 DOWNTO 0);
 
   signal baud_tick : STD_LOGIC;
-  
+   
 begin
 
   status_reg_next(7) <= '0';
 
   baud0 : BaudRateGeneratorLite generic map (
-    CLOCK_FREQ => 50000000,
-    BITS       => 5,  -- ceil(log2(clk_freq / baud_rate / 16))
-    BAUD_RATE  => 115200
+    CLOCK_FREQ => CLOCK_FREQ,
+    BITS       => BAUD_BITS,  -- ceil(log2(clk_freq / baud_rate / 16))
+    BAUD_RATE  => BAUD_RATE
     )
     port map (CLK   => CLK,
                TICK => baud_tick,
