@@ -196,7 +196,7 @@ begin
   -- 11 = REDLED1        - wo
 
   uart_wr_data(7 downto 0) <= port_data_out;
-  uart_n_WR                <= not port_wr_strobe when to_integer(unsigned(port_id)) = 0;
+  uart_n_WR                <= not port_wr_strobe when to_integer(unsigned(port_id)) = 0 else '1';
 
   uart_addr <= "00" when to_integer(unsigned(port_id)) = 0 else
                "01" when to_integer(unsigned(port_id)) = 1 else
@@ -204,7 +204,7 @@ begin
 
   uart_n_RD <= not port_rd_strobe when
                to_integer(unsigned(port_id)) = 1 or
-               to_integer(unsigned(port_id)) = 2;
+               to_integer(unsigned(port_id)) = 2 else '1';
 					
   port_data_in <= uart_rd_data(7 downto 0) when to_integer(unsigned(port_id)) = 2 else
 					"ZZZZZZZZ";

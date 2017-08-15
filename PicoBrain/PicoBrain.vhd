@@ -56,7 +56,7 @@ architecture RTL of PicoBrain is
   signal pc, pc_next : natural range 0 to 1023 := 0;
 
   -- state
-  type state_t is (fetch, decode);
+  type state_t is (fetch, decode, fetch_from_ram);
   signal cycle, cycle_next : state_t := fetch;
 
   -- current op
@@ -544,9 +544,13 @@ begin
               when "10" =>              -- FETCH,"sX,kk"
                 op_b_sel   <= OP_B_SEL_LITERAL;
                 current_op <= OP_FETCH;
+					 cycle_next <= fetch_from_ram;
+					 fc_call_return <= FC_NOP;
               when "11" =>              -- FETCH,"sX,(sY)"
                 op_b_sel   <= OP_B_SEL_REGISTER;
                 current_op <= OP_FETCH;
+					 cycle_next <= fetch_from_ram;
+					 fc_call_return <= FC_NOP;
               when others =>
             end case;
           when "0010" =>                -- and
@@ -627,6 +631,11 @@ begin
             end case;
           when others =>
         end case;
+		 when fetch_from_ram => 
+		  cycle_next <= fetch;
+		  fc_call_return <= FC_INC;
+		  current_op <= OP_FETCH;
+    
     end case;
   end process;
 

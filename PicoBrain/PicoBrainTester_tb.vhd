@@ -89,9 +89,9 @@ begin
 
   process
   begin
-    wait for 10 ns;
+    wait for 13 ns;
     tb_key(0) <= '0';
-    wait for 40 ns;
+    wait for 16 ns;
     tb_key(0) <= '1';
     wait for 10 ms;
   end process;

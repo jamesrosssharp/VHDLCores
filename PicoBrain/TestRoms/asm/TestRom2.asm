@@ -1,15 +1,25 @@
 
 START:
+
+	; sf = "stack pointer"
+
+	LOAD	sf, 0x00
+	LOAD	s0, 0xaa
+
 	CALL	PRINT_HELLO
 	JUMP	START	
 
 ;
 ;	PRINT_HELLO
-;	Trashes: r0
+;	Trashes: s0
 ;
 ;
 
 PRINT_HELLO:
+
+	STORE   s0, (sf)
+	ADD	sf, 0x01
+
 	LOAD 	s0, 0x48
 	CALL	PRINT_BYTE
 
@@ -19,10 +29,27 @@ PRINT_HELLO:
 	LOAD	s0, 0x6c
 	CALL	PRINT_BYTE
 
-	LOAD 	s0, 0x6c
 	CALL	PRINT_BYTE
 
 	LOAD	s0, 0x6f
+	CALL	PRINT_BYTE
+
+	LOAD	s0, 0x20
+	CALL	PRINT_BYTE
+
+	LOAD	s0, 0x57
+	CALL	PRINT_BYTE
+
+	LOAD	s0, 0x6f
+	CALL	PRINT_BYTE
+
+	LOAD	s0, 0x72
+	CALL	PRINT_BYTE
+
+	LOAD	s0, 0x6c
+	CALL	PRINT_BYTE
+
+	LOAD	s0, 0x64
 	CALL	PRINT_BYTE
 
 	LOAD	s0, 0x21
@@ -34,6 +61,9 @@ PRINT_HELLO:
 	LOAD	s0, 0x0a
 	CALL	PRINT_BYTE
 
+	SUB	sf,0x01
+	FETCH	s0,(sf)
+
 	RETURN
 
 
@@ -42,6 +72,9 @@ PRINT_HELLO:
 ;	In:	s0 = byte
 ;
 PRINT_BYTE:
+	STORE	s0,(sf)
+	ADD	sf, 0x01
+
 	OUTPUT s0, 0x00 ; port 0x00 = TX_FIFO
 
 
@@ -49,6 +82,9 @@ POLL:
 	INPUT	s0, 0x02 ; port 0x02 = UART_STATUS
 	TEST	s0, 0x02
 	JUMP 	 Z, POLL	
+
+	SUB	sf, 0x01
+	FETCH	s0, (sf)
 
 	RETURN
 
