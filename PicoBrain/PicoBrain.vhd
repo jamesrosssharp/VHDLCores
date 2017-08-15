@@ -102,7 +102,8 @@ architecture RTL of PicoBrain is
   -- scratchpad ram / call stack ram
 
   signal scratchpad_ram_addr                         : unsigned (5 downto 0);
-  signal callstack_ram_addr, callstack_ram_addr_next : unsigned (5 downto 0);
+  signal callstack_ram_addr, callstack_ram_wr_addr, callstack_ram_wr_addr_next 
+																	  : unsigned (5 downto 0);
   
   signal ram_addr_a : natural range 0 to 127;
   signal ram_addr_b : natural range 0 to 127;
@@ -214,11 +215,14 @@ begin
 
   -- assign callstack ram
 
-  callstack_ram_data_in <= std_logic_vector(to_unsigned(pc, 10));  -- we always write current PC into callstack ram
+  callstack_ram_data_in <= std_logic_vector(to_unsigned(pc, 10) + 1);  -- we always write next PC into callstack ram
 
-  callstack_ram_addr_next <= callstack_ram_addr + 1 when callstack_op = CALLSTACK_PUSH else
-                             callstack_ram_addr - 1 when callstack_op = CALLSTACK_POP else
-                             callstack_ram_addr;
+  callstack_ram_wr_addr_next <= callstack_ram_wr_addr + 1 when callstack_op = CALLSTACK_PUSH else
+										  callstack_ram_wr_addr - 1 when callstack_op = CALLSTACK_POP  else	
+                                callstack_ram_wr_addr;
+										
+  callstack_ram_addr <= callstack_ram_wr_addr when callstack_op = CALLSTACK_PUSH else
+								callstack_ram_wr_addr - 1;
 
   wr_callstack <= '1' when callstack_op = CALLSTACK_PUSH else
                   '0';
@@ -237,7 +241,7 @@ begin
     if (reset = '1') then  -- is picoblaze reset active high or active low?
 
       cycle              <= fetch;
-      callstack_ram_addr <= "000000";
+      callstack_ram_wr_addr <= "000000";
       C                  <= '0';
       Z                  <= '0';
       I                  <= '0';
@@ -250,7 +254,7 @@ begin
       C                                        <= C_next;
       Z                                        <= Z_next;
       I                                        <= I_next;
-      callstack_ram_addr                       <= callstack_ram_addr_next;
+      callstack_ram_wr_addr                       <= callstack_ram_wr_addr_next;
       cycle                                    <= cycle_next;
 
     end if;
