@@ -7,11 +7,14 @@ START:
 	LOAD	s0, 0xaa
 
 	CALL	PRINT_HELLO
+
+	CALL	DO_NIGHTRIDER
+
 	JUMP	START	
 
 ;
 ;	PRINT_HELLO
-;	Trashes: s0
+;	Trashes: none
 ;
 ;
 
@@ -87,4 +90,242 @@ POLL:
 	FETCH	s0, (sf)
 
 	RETURN
+;
+;	DO_NIGHTRIDER
+;
+;	Nightrider effect and hex counter
+;
+
+DO_NIGHTRIDER:
+
+	LOAD	s8, 0	; s8:s9 : 16 bit count to output to hex displays
+	LOAD	s9, 0
+
+	LOAD	sa, 1	; sa:sb:sc : 18 bits used for chaser
+	LOAD	sb, 0	
+	LOAD	sc, 0
+
+	LOAD	sd, 0	; sd: direction of chaser
+
+NR_LOOP:
+
+	CALL	SLEEP
+
+	ADD	s8,0x01
+	ADDCY   s9,0x00
+
+	TEST	sd,0xff
+	JUMP	NZ, ROTATE_RIGHT
+
+	SLA	sa
+	SLA	sb
+	SLA	sc
+
+	COMPARE	sc,0x02
+	JUMP	NZ, DONE_ROTATE
+
+	LOAD	sd, 0xff
+
+	JUMP	DONE_ROTATE		
+
+ROTATE_RIGHT:
+
+	SRA	sc
+	SRA	sb
+	SRA	sa
+
+	COMPARE	sa,0x01
+	JUMP	NZ, DONE_ROTATE
+
+	LOAD	sd, 0x00
+
+DONE_ROTATE:
+
+	; output count to hex digits
+
+	LOAD	s0, s8
+	CALL	CONV_HEX_DIGIT
+	OUTPUT	s1, 3
+
+	SR0	s0
+	SR0	s0
+	SR0	s0
+	SR0	s0
+	CALL	CONV_HEX_DIGIT
+	OUTPUT	s1, 4
+
+	LOAD	s0, s9
+	CALL	CONV_HEX_DIGIT
+	OUTPUT	s1, 5
+
+	SR0	s0
+	SR0	s0
+	SR0	s0
+	SR0	s0
+	CALL	CONV_HEX_DIGIT
+	OUTPUT	s1, 6
+
+	; output LED chaser	
+	
+	OUTPUT	sa, 0x09
+	OUTPUT  sb, 0x0a
+	OUTPUT  sc, 0x0b 
+
+	JUMP	NR_LOOP
+
+	RETURN
+;
+;	SLEEP: sleep for 128k cycles (approx 35 Hz)
+;
+
+SLEEP:
+
+	STORE s0, (sf)
+	ADD   sf, 0x01
+
+	STORE s1, (sf)
+	ADD   sf, 0x01
+
+	STORE s2, (sf)
+
+	LOAD  s0, 0
+	LOAD  s1, 0
+	LOAD  s2, 0
+
+SLEEP_LOOP:
+	ADD   	s0, 1
+	ADDCY   s1, 0
+	ADDCY	s2, 0
+	COMPARE s2, 0x02
+	JUMP NZ, SLEEP_LOOP
+
+	FETCH   s2, (sf)
+	SUB 	sf, 0x01
+
+	FETCH   s1, (sf)
+	SUB 	sf, 0x01
+	
+	FETCH   s0, (sf)
+	
+	RETURN
+
+;
+;	CONV_HEX_DIGIT: convert the low nibble of s0 to
+;	a driver byte in s1
+;
+
+CONV_HEX_DIGIT:
+
+	STORE s0, (sf)
+
+	AND	s0, 0x0f
+	
+	COMPARE s0, 0x00
+	JUMP NZ, NOT0
+
+	LOAD 	s1, 0xc0
+	JUMP DONE_CONV
+
+NOT0:
+	COMPARE s0, 0x01
+	JUMP NZ, NOT1
+
+	LOAD 	s1, 0xf9
+	JUMP DONE_CONV
+NOT1:
+	COMPARE s0, 0x02
+	JUMP NZ, NOT2
+
+	LOAD 	s1, 0xa4
+	JUMP DONE_CONV
+
+NOT2:
+	COMPARE s0, 0x03
+	JUMP NZ, NOT3
+
+	LOAD 	s1, 0xb0
+	JUMP DONE_CONV
+NOT3:
+	COMPARE s0, 0x04
+	JUMP NZ, NOT4
+
+	LOAD 	s1, 0x99
+	JUMP DONE_CONV
+
+NOT4:
+	COMPARE s0, 0x05
+	JUMP NZ, NOT5
+
+	LOAD 	s1, 0x92
+	JUMP DONE_CONV
+
+NOT5:
+	COMPARE s0, 0x06
+	JUMP NZ, NOT6
+
+	LOAD 	s1, 0x82
+	JUMP DONE_CONV
+
+NOT6:
+	COMPARE s0, 0x07
+	JUMP NZ, NOT7
+
+	LOAD 	s1, 0xf8
+	JUMP DONE_CONV
+NOT7:
+	COMPARE s0, 0x08
+	JUMP NZ, NOT8
+
+	LOAD 	s1, 0x80
+	JUMP DONE_CONV
+
+NOT8:
+	COMPARE s0, 0x09
+	JUMP NZ, NOT9
+
+	LOAD 	s1, 0x90
+	JUMP DONE_CONV
+NOT9:
+	COMPARE s0, 0x0a
+	JUMP NZ, NOT10
+
+	LOAD 	s1, 0x88
+	JUMP DONE_CONV
+
+NOT10:
+	COMPARE s0, 0x0b
+	JUMP NZ, NOT11
+
+	LOAD 	s1, 0x83
+	JUMP DONE_CONV
+
+NOT11:
+	COMPARE s0, 0x0c
+	JUMP NZ, NOT12
+
+	LOAD 	s1, 0xc6
+	JUMP DONE_CONV
+
+NOT12:
+	COMPARE s0, 0x0d
+	JUMP NZ, NOT13
+
+	LOAD 	s1, 0xa1
+	JUMP DONE_CONV
+NOT13:
+	COMPARE s0, 0x0e
+	JUMP NZ, NOT14
+
+	LOAD 	s1, 0x84
+	JUMP DONE_CONV
+
+NOT14:
+
+	LOAD 	s1, 0x8e
+
+DONE_CONV:
+	FETCH s0, (sf)
+
+	RETURN
+
 

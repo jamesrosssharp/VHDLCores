@@ -62,6 +62,15 @@ is
   signal tb_key : std_logic_vector (3 downto 0) := "1111";
 
   signal tb_txd : std_logic;
+  
+  signal tb_hex0 : std_logic_vector (7 downto 0);
+  signal tb_hex1 : std_logic_vector (7 downto 0);
+  signal tb_hex2 : std_logic_vector (7 downto 0);
+  signal tb_hex3 : std_logic_vector (7 downto 0);
+  
+  signal tb_ledg : std_logic_vector (7 downto 0);
+  signal tb_ledr : std_logic_vector (9 downto 0);
+  
 
 begin
 
@@ -70,12 +79,12 @@ begin
     UART_RXD => '1',
     CLOCK_50 => tb_clk,
     KEY      => tb_key,
-    HEX0     => open,
-    HEX1     => open,
-    HEX2     => open,
-    HEX3     => open,
-    LEDR     => open,
-    LEDG     => open,
+    HEX0     => tb_hex0,
+    HEX1     => tb_hex1,
+    HEX2     => tb_hex2,
+    HEX3     => tb_hex3,
+    LEDR     => tb_ledr,
+    LEDG     => tb_ledg,
     SW       => "0000000000"
     );
 
