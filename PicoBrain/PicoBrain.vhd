@@ -56,11 +56,11 @@ architecture RTL of PicoBrain is
   signal pc, pc_next : natural range 0 to 1023 := 0;
 
   -- state
-  type state_t is (fetch, decode, fetch_from_ram);
+  type state_t is (fetch, decode, fetch_from_ram, service_interrupt);
   signal cycle, cycle_next : state_t := fetch;
 
   -- current op
-  type op_t is (OP_ALU, OP_SHIFT, OP_LOGIC, OP_LOAD, OP_FETCH, OP_STORE, OP_OUTPUT, OP_INPUT, NOP);
+  type op_t is (OP_ALU, OP_SHIFT, OP_LOGIC, OP_LOAD, OP_FETCH, OP_STORE, OP_OUTPUT, OP_INPUT, OP_RETURNI, NOP);
   signal current_op : op_t;
 
   -- interrupt op
@@ -72,7 +72,7 @@ architecture RTL of PicoBrain is
   signal xxx, yyy : std_logic_vector(3 downto 0);
   signal kkk      : std_logic_vector(7 downto 0);
   signal aaa      : std_logic_vector(9 downto 0);
-  
+
   -- operands
   signal op_a, op_out, op_b : std_logic_vector(7 downto 0);
 
@@ -86,25 +86,25 @@ architecture RTL of PicoBrain is
   signal alu_C_next, alu_Z_next : std_logic;
 
   -- shifter
-  signal shift_out    : std_logic_vector(7 downto 0);
-  signal shift_op     : std_logic_vector (3 downto 0);
+  signal shift_out                  : std_logic_vector(7 downto 0);
+  signal shift_op                   : std_logic_vector (3 downto 0);
   signal shift_C_next, shift_Z_next : std_logic;
-  
+
   -- logical
-  signal logical_out    : std_logic_vector(7 downto 0);
-  signal logic_op     : std_logic_vector (1 downto 0);
+  signal logical_out                    : std_logic_vector(7 downto 0);
+  signal logic_op                       : std_logic_vector (1 downto 0);
   signal logical_C_next, logical_Z_next : std_logic;
-  
+
 
   -- flags
-  signal C, C_next, Z, Z_next, I, I_next : std_logic;
+  signal C, C_next, C_pres, C_pres_next, Z, Z_next, Z_pres, Z_pres_next, I, I_next : std_logic;
 
   -- scratchpad ram / call stack ram
 
-  signal scratchpad_ram_addr                         : unsigned (5 downto 0);
-  signal callstack_ram_addr, callstack_ram_wr_addr, callstack_ram_wr_addr_next 
-																	  : unsigned (5 downto 0);
-  
+  signal scratchpad_ram_addr : unsigned (5 downto 0);
+  signal callstack_ram_addr, callstack_ram_wr_addr, callstack_ram_wr_addr_next
+    : unsigned (5 downto 0);
+
   signal ram_addr_a : natural range 0 to 127;
   signal ram_addr_b : natural range 0 to 127;
 
@@ -116,7 +116,7 @@ architecture RTL of PicoBrain is
 
   -- flow control
 
-  type fc_call_return_t is (FC_CALL, FC_JUMP, FC_RETURN, FC_INC, FC_NOP);
+  type fc_call_return_t is (FC_CALL, FC_JUMP, FC_RETURN, FC_INC, FC_NOP, FC_INTERRUPT);
 
   signal fc_call_return : fc_call_return_t;
   signal fc_op          : std_logic_vector(2 downto 0);
@@ -131,10 +131,10 @@ begin
   -- combined ram for callstack and scratchpad.
   -- port a: scratchpad
   -- port b: callstack
-  
+
   ram_addr_a <= to_integer('0' & scratchpad_ram_addr);
   ram_addr_b <= to_integer('1' & callstack_ram_addr);
-  
+
   ram0 : picobrain_dual_port_ram port map
     (
       clk    => clk,
@@ -184,30 +184,33 @@ begin
   port_id <= op_b when current_op = OP_OUTPUT or current_op = OP_INPUT else
              "ZZZZZZZZ";
 
-  read_strobe <= '1' when current_op = OP_INPUT else '0';
+  read_strobe  <= '1' when current_op = OP_INPUT  else '0';
   write_strobe <= '1' when current_op = OP_OUTPUT else '0';
 
   -- multiplex next carry
   C_next <= alu_C_next when current_op = OP_ALU else
             shift_C_next   when current_op = OP_SHIFT else
             logical_C_next when current_op = OP_LOGIC else
+            C_pres         when current_op = OP_RETURNI else
             C;
 
   -- multiplex next zero flag
   Z_next <= alu_Z_next when current_op = OP_ALU else
             shift_Z_next   when current_op = OP_SHIFT else
             logical_Z_next when current_op = OP_LOGIC else
+            Z_pres         when current_op = OP_RETURNI else
             Z;
 
   -- mutiplex next interrupt flag
   I_next <= '0' when interrupt_op = INTERRUPT_DISABLE else
             '1' when interrupt_op = INTERRUPT_ENABLE else
+            '0' when cycle = service_interrupt else
             I;
 
   -- assign scratchpad ram
 
   scratchpad_ram_addr <= unsigned(op_b(5 downto 0));  -- scratchpad ram address is always
-                                            -- op b (either kkk or (sY)
+                                        -- op b (either kkk or (sY)
 
   scratchpad_ram_data_in <= "00" & op_a;  -- always write into scratchpad ram from sX
 
@@ -218,11 +221,11 @@ begin
   callstack_ram_data_in <= std_logic_vector(to_unsigned(pc, 10) + 1);  -- we always write next PC into callstack ram
 
   callstack_ram_wr_addr_next <= callstack_ram_wr_addr + 1 when callstack_op = CALLSTACK_PUSH else
-										  callstack_ram_wr_addr - 1 when callstack_op = CALLSTACK_POP  else	
+                                callstack_ram_wr_addr - 1 when callstack_op = CALLSTACK_POP else
                                 callstack_ram_wr_addr;
-										
+
   callstack_ram_addr <= callstack_ram_wr_addr when callstack_op = CALLSTACK_PUSH else
-								callstack_ram_wr_addr - 1;
+                        callstack_ram_wr_addr - 1;
 
   wr_callstack <= '1' when callstack_op = CALLSTACK_PUSH else
                   '0';
@@ -240,21 +243,25 @@ begin
 
     if (reset = '1') then  -- is picoblaze reset active high or active low?
 
-      cycle              <= fetch;
+      cycle                 <= fetch;
       callstack_ram_wr_addr <= "000000";
-      C                  <= '0';
-      Z                  <= '0';
-      I                  <= '0';
-      pc                 <= 0;
+      C                     <= '0';
+      C_pres                <= '0';
+      Z                     <= '0';
+      Z_pres                <= '0';
+      I                     <= '0';
+      pc                    <= 0;
 
     elsif rising_edge(clk) then
 
       pc                                       <= pc_next;
       register_bank(to_integer(unsigned(xxx))) <= op_out;  -- store result
       C                                        <= C_next;
+      C_pres                                   <= C_pres_next;
       Z                                        <= Z_next;
+      Z_pres                                   <= Z_pres_next;
       I                                        <= I_next;
-      callstack_ram_wr_addr                       <= callstack_ram_wr_addr_next;
+      callstack_ram_wr_addr                    <= callstack_ram_wr_addr_next;
       cycle                                    <= cycle_next;
 
     end if;
@@ -428,7 +435,7 @@ begin
           zero := zero and (not result(i));
         end loop;
 
-      when others =>                      -- TEST
+      when others =>                    -- TEST
         result  := op_a;
         result2 := op_a and op_b;
 
@@ -455,13 +462,13 @@ begin
   process (pc, fc_call_return, fc_op, callstack_top, aaa, Z, C)
     variable fc_cond      : std_logic;
     variable next_address : natural range 0 to 1023;
-	 variable inc_address  : natural range 0 to 1023;
+    variable inc_address  : natural range 0 to 1023;
   begin
-  
+
     if pc = 1023 then
-       inc_address := 0;
+      inc_address := 0;
     else
-       inc_address := pc + 1;
+      inc_address := pc + 1;
     end if;
 
 
@@ -469,13 +476,16 @@ begin
       when FC_CALL =>
         next_address := to_integer(unsigned(aaa));
         callstack_op <= CALLSTACK_PUSH;
+      when FC_INTERRUPT =>
+        next_address := 1023;
+        callstack_op <= CALLSTACK_PUSH;
       when FC_JUMP =>
         next_address := to_integer(unsigned(aaa));
         callstack_op <= CALLSTACK_NOP;
       when FC_INC =>
 
                                         -- need to wrap PC, it is natural type.
-		  next_address := inc_address;
+        next_address := inc_address;
         callstack_op <= CALLSTACK_NOP;
       when FC_RETURN =>
         next_address := to_integer(unsigned(callstack_top));
@@ -508,27 +518,36 @@ begin
 
   -- instruction decode
 
-  process (cycle, pc, register_bank, instruction)
+  process (cycle, pc, register_bank, instruction, C, C_pres, Z, Z_pres, I)
   begin
 
     -- assign defaults
-    fc_op          <= "000";
-    current_op     <= NOP;
-    interrupt_op   <= INTERRUPT_NOP;
-    alu_op         <= "111";
-    shift_op       <= "0101";           -- nop
-    logic_op       <= "00";             -- and
-    op_b_sel       <= OP_B_SEL_REGISTER;
+    fc_op        <= "000";
+    current_op   <= NOP;
+    interrupt_op <= INTERRUPT_NOP;
+    alu_op       <= "111";
+    shift_op     <= "0101";             -- nop
+    logic_op     <= "00";               -- and
+    op_b_sel     <= OP_B_SEL_REGISTER;
+
+    C_pres_next  <= C_pres;
+    Z_pres_next  <= Z_pres;
+
+    interrupt_ack <= '0';
 
     case cycle is
       when fetch =>
-        cycle_next <= decode;
-		  fc_call_return <= FC_NOP;
-    
+        cycle_next     <= decode;
+        fc_call_return <= FC_NOP;
+
       when decode =>
-        cycle_next <= fetch;
-		  fc_call_return <= FC_INC;
-    
+        cycle_next     <= fetch;
+        fc_call_return <= FC_INC;
+
+        if (interrupt = '1' and I = '1') then
+          cycle_next <= service_interrupt;
+        end if;
+        
         case instruction(17 downto 14) is
           when "0000" =>                -- load
             current_op <= OP_LOAD;
@@ -536,21 +555,21 @@ begin
           when "0001" =>                -- input, fetch
             case instruction (13 downto 12) is
               when "00" =>              -- INPUT,"sX,pp"
-                op_b_sel  <= OP_B_SEL_LITERAL;
+                op_b_sel   <= OP_B_SEL_LITERAL;
                 current_op <= OP_INPUT;
               when "01" =>              -- INPUT,"sX,(sY)"
-                op_b_sel <= OP_B_SEL_REGISTER;
+                op_b_sel   <= OP_B_SEL_REGISTER;
                 current_op <= OP_INPUT;
               when "10" =>              -- FETCH,"sX,kk"
-                op_b_sel   <= OP_B_SEL_LITERAL;
-                current_op <= OP_FETCH;
-					 cycle_next <= fetch_from_ram;
-					 fc_call_return <= FC_NOP;
+                op_b_sel       <= OP_B_SEL_LITERAL;
+                current_op     <= OP_FETCH;
+                cycle_next     <= fetch_from_ram;
+                fc_call_return <= FC_NOP;
               when "11" =>              -- FETCH,"sX,(sY)"
-                op_b_sel   <= OP_B_SEL_REGISTER;
-                current_op <= OP_FETCH;
-					 cycle_next <= fetch_from_ram;
-					 fc_call_return <= FC_NOP;
+                op_b_sel       <= OP_B_SEL_REGISTER;
+                current_op     <= OP_FETCH;
+                cycle_next     <= fetch_from_ram;
+                fc_call_return <= FC_NOP;
               when others =>
             end case;
           when "0010" =>                -- and
@@ -579,7 +598,7 @@ begin
             if (instruction(13) = '0') then
               alu_op <= "000";
             else
-              alu_op <= "001"; -- add with carry
+              alu_op <= "001";          -- add with carry
             end if;
           when "0111" =>                -- sub
             op_b_sel   <= instruction(12);
@@ -587,40 +606,49 @@ begin
             if (instruction(13) = '0') then
               alu_op <= "010";
             else
-              alu_op <= "011"; -- sub with borrow
+              alu_op <= "011";          -- sub with borrow
             end if;
           when "1000" =>                -- shift / rotate
             current_op <= OP_SHIFT;
-            shift_op <= instruction(3 downto 0);
-          when "1001" => 
-			   null;
-			when "1010" => -- return
+            shift_op   <= instruction(3 downto 0);
+          when "1001" =>
+            null;
+          when "1010" =>                -- return
             fc_call_return <= FC_RETURN;
-            fc_op <= instruction(12 downto 10);
-		    when "1011" =>                -- output / store
+            fc_op          <= instruction(12 downto 10);
+          when "1011" =>                -- output / store
             case instruction(13 downto 12) is
               when "00" =>              -- OUTPUT sX, pp
-                op_b_sel <= OP_B_SEL_LITERAL;
+                op_b_sel   <= OP_B_SEL_LITERAL;
                 current_op <= OP_OUTPUT;
               when "01" =>              -- OUTPUT sX, (sY)
-                op_b_sel <= OP_B_SEL_REGISTER;
+                op_b_sel   <= OP_B_SEL_REGISTER;
                 current_op <= OP_OUTPUT;
               when "10" =>              -- STORE  sX, ss
-                op_b_sel <= OP_B_SEL_LITERAL;
+                op_b_sel   <= OP_B_SEL_LITERAL;
                 current_op <= OP_STORE;
               when "11" =>              -- STORE  sX, (sY)
-                op_b_sel <= OP_B_SEL_REGISTER;
+                op_b_sel   <= OP_B_SEL_REGISTER;
                 current_op <= OP_STORE;
               when others =>
             end case;
           when "1100" =>                -- call
             fc_call_return <= FC_CALL;
-            fc_op <= instruction(12 downto 10);
+            fc_op          <= instruction(12 downto 10);
           when "1101" =>                -- jump
             fc_call_return <= FC_JUMP;
-            fc_op <= instruction(12 downto 10);
+            fc_op          <= instruction(12 downto 10);
           when "1110" =>                -- return from interrupt
-            -- TODO
+            case instruction(0) is
+              when '0' =>               -- DISABLE INTERRUPT
+                interrupt_op <= INTERRUPT_DISABLE;
+              when '1' =>               -- ENABLE INTERRUPT
+                interrupt_op <= INTERRUPT_ENABLE;
+              when others =>
+            end case;
+            fc_call_return <= FC_RETURN;
+            current_op     <= OP_RETURNI;
+            fc_op <= "000"; 
           when "1111" =>                -- interrupt enable / disable
             case instruction(0) is
               when '0' =>               -- DISABLE INTERRUPT
@@ -631,11 +659,18 @@ begin
             end case;
           when others =>
         end case;
-		 when fetch_from_ram => 
-		  cycle_next <= fetch;
-		  fc_call_return <= FC_INC;
-		  current_op <= OP_FETCH;
-    
+        
+      when fetch_from_ram =>
+        cycle_next     <= fetch;
+        fc_call_return <= FC_INC;
+        current_op     <= OP_FETCH;
+
+      when service_interrupt =>
+        cycle_next     <= fetch;
+        C_pres_next    <= C;
+        Z_pres_next    <= Z;
+        fc_call_return <= FC_INTERRUPT;
+        interrupt_ack  <= '1';
     end case;
   end process;
 

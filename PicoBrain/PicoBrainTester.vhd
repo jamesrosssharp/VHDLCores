@@ -8,7 +8,7 @@ use IEEE.numeric_std.all;
 
 entity PicoBrainTester is
   generic (
-    ROM_SEL    : natural := 1;         -- select which test rom to instantiate
+    ROM_SEL    : natural := 1;          -- select which test rom to instantiate
     CLOCK_FREQ : integer := 50000000
     );
   port (
@@ -87,7 +87,7 @@ architecture RTL of PicoBrainTester is
 
   end component;
 
-  
+
   -- UARTLite
 
   component UARTLite is
@@ -132,13 +132,17 @@ architecture RTL of PicoBrainTester is
 
   signal LEDR_next_1 : std_logic_vector(7 downto 0);
   signal LEDR_next_2 : std_logic_vector(1 downto 0);
-  signal LEDG_next : std_logic_vector(7 downto 0);
-    
+  signal LEDG_next   : std_logic_vector(7 downto 0);
+
   signal LEDR_val : std_logic_vector(9 downto 0);
   signal LEDG_val : std_logic_vector(7 downto 0);
-	 
+
+  signal interrupt : std_logic;
+  
 begin
 
+  interrupt    <= not KEY(1);
+  
   reset        <= not KEY(0);
   n_reset      <= KEY(0);
   rom_addr_nat <= to_integer(unsigned(rom_addr));
@@ -163,7 +167,7 @@ begin
           );
   end generate rom1;
 
-  
+
   uart0 : UARTLite
     port map (
       TX      => UART_TXD,
@@ -186,7 +190,7 @@ begin
       out_port      => port_data_out,
       read_strobe   => port_rd_strobe,
       in_port       => port_data_in,
-      interrupt     => '0',
+      interrupt     => interrupt,
       interrupt_ack => open,
       reset         => reset,
       clk           => CLOCK_50
@@ -217,57 +221,57 @@ begin
   uart_n_RD <= not port_rd_strobe when
                to_integer(unsigned(port_id)) = 1 or
                to_integer(unsigned(port_id)) = 2 else '1';
-					
+
   port_data_in <= uart_rd_data(7 downto 0) when to_integer(unsigned(port_id)) = 2 else
-					"ZZZZZZZZ";
-					
+                  "ZZZZZZZZ";
+
   HEX0 <= HEX0_val;
   HEX1 <= HEX1_val;
   HEX2 <= HEX2_val;
   HEX3 <= HEX3_val;
   LEDG <= LEDG_val;
   LEDR <= LEDR_val;
-					
+
   HEX0_next <= port_data_out when to_integer(unsigned(port_id)) = 3 and port_wr_strobe = '1' else
-			 HEX0_val;
+               HEX0_val;
 
   HEX1_next <= port_data_out when to_integer(unsigned(port_id)) = 4 and port_wr_strobe = '1' else
-			 HEX1_val;
+               HEX1_val;
 
   HEX2_next <= port_data_out when to_integer(unsigned(port_id)) = 5 and port_wr_strobe = '1' else
-			 HEX2_val;
+               HEX2_val;
 
   HEX3_next <= port_data_out when to_integer(unsigned(port_id)) = 6 and port_wr_strobe = '1' else
-			 HEX3_val;
+               HEX3_val;
 
   LEDG_next <= port_data_out when to_integer(unsigned(port_id)) = 9 and port_wr_strobe = '1' else
-			 LEDG_val;
+               LEDG_val;
 
   LEDR_next_1 <= port_data_out when to_integer(unsigned(port_id)) = 10 and port_wr_strobe = '1' else
-			 LEDR_val(7 downto 0);
+                 LEDR_val(7 downto 0);
 
   LEDR_next_2 <= port_data_out(1 downto 0) when to_integer(unsigned(port_id)) = 11 and port_wr_strobe = '1' else
-			 LEDR_val(9 downto 8);
+                 LEDR_val(9 downto 8);
 
   process (CLOCK_50, reset)
   begin
-	if (reset = '1') then
-		HEX0_val <= (others => '0');
-		HEX1_val <= (others => '0');
-		HEX2_val <= (others => '0');
-		HEX3_val <= (others => '0');
-		LEDG_val <= (others => '0');
-		LEDR_val <= (others => '0');
-   elsif rising_edge(CLOCK_50) then
-		HEX0_val <= HEX0_next;
-		HEX1_val <= HEX1_next;
-		HEX2_val <= HEX2_next;
-		HEX3_val <= HEX3_next;
-		LEDR_val(7 downto 0) <= LEDR_next_1;
-		LEDR_val(9 downto 8) <= LEDR_next_2;
-		LEDG_val <= LEDG_next;
-	end if;
+    if (reset = '1') then
+      HEX0_val <= (others => '0');
+      HEX1_val <= (others => '0');
+      HEX2_val <= (others => '0');
+      HEX3_val <= (others => '0');
+      LEDG_val <= (others => '0');
+      LEDR_val <= (others => '0');
+    elsif rising_edge(CLOCK_50) then
+      HEX0_val             <= HEX0_next;
+      HEX1_val             <= HEX1_next;
+      HEX2_val             <= HEX2_next;
+      HEX3_val             <= HEX3_next;
+      LEDR_val(7 downto 0) <= LEDR_next_1;
+      LEDR_val(9 downto 8) <= LEDR_next_2;
+      LEDG_val             <= LEDG_next;
+    end if;
   end process;
-  
+
 end RTL;
 

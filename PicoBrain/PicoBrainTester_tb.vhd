@@ -102,8 +102,17 @@ begin
     tb_key(0) <= '0';
     wait for 16 ns;
     tb_key(0) <= '1';
-    wait for 10 ms;
+    wait for 1 ms;
+
+	 for i in 0 to 7 loop
+		 tb_key(1) <= '0';
+		 wait for 100ns;
+		 tb_key(1) <= '1';
+		 wait for 1ms;
+	end loop;
+
   end process;
+
 
   -- process serial data
   process
