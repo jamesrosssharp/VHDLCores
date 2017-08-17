@@ -137,12 +137,18 @@ architecture RTL of PicoBrainTester is
   signal LEDR_val : std_logic_vector(9 downto 0);
   signal LEDG_val : std_logic_vector(7 downto 0);
 
-  signal interrupt : std_logic;
-  
+  --
+  --    interrupt signal *must* be synchronous with master clock. We filter the key press
+  --  through two registers to prevent metastability.
+  --
+  signal interrupt, interrupt_next, interrupt_next_next : std_logic;
+
+  signal interrupt_latch, interrupt_latch_next, interrupt_ack : std_logic;
+
 begin
 
-  interrupt    <= not KEY(1);
-  
+  interrupt_next_next <= not KEY(1) or not KEY(2);
+
   reset        <= not KEY(0);
   n_reset      <= KEY(0);
   rom_addr_nat <= to_integer(unsigned(rom_addr));
@@ -190,8 +196,8 @@ begin
       out_port      => port_data_out,
       read_strobe   => port_rd_strobe,
       in_port       => port_data_in,
-      interrupt     => interrupt,
-      interrupt_ack => open,
+      interrupt     => interrupt_latch,
+      interrupt_ack => interrupt_ack,
       reset         => reset,
       clk           => CLOCK_50
       );
@@ -253,15 +259,23 @@ begin
   LEDR_next_2 <= port_data_out(1 downto 0) when to_integer(unsigned(port_id)) = 11 and port_wr_strobe = '1' else
                  LEDR_val(9 downto 8);
 
+  -- latch the interrupt signal, and clear when interrupt is acked                              
+  interrupt_latch_next <= '0' when interrupt_ack = '1' else
+                          '1' when interrupt = '1' else
+                          interrupt_latch;
+
   process (CLOCK_50, reset)
   begin
     if (reset = '1') then
-      HEX0_val <= (others => '0');
-      HEX1_val <= (others => '0');
-      HEX2_val <= (others => '0');
-      HEX3_val <= (others => '0');
-      LEDG_val <= (others => '0');
-      LEDR_val <= (others => '0');
+      HEX0_val        <= (others => '0');
+      HEX1_val        <= (others => '0');
+      HEX2_val        <= (others => '0');
+      HEX3_val        <= (others => '0');
+      LEDG_val        <= (others => '0');
+      LEDR_val        <= (others => '0');
+      interrupt       <= '0';
+      interrupt_next  <= '0';
+      interrupt_latch <= '0';
     elsif rising_edge(CLOCK_50) then
       HEX0_val             <= HEX0_next;
       HEX1_val             <= HEX1_next;
@@ -270,6 +284,9 @@ begin
       LEDR_val(7 downto 0) <= LEDR_next_1;
       LEDR_val(9 downto 8) <= LEDR_next_2;
       LEDG_val             <= LEDG_next;
+      interrupt            <= interrupt_next;
+      interrupt_next       <= interrupt_next_next;
+      interrupt_latch      <= interrupt_latch_next;
     end if;
   end process;
 

@@ -56,11 +56,12 @@ architecture RTL of PicoBrain is
   signal pc, pc_next : natural range 0 to 1023 := 0;
 
   -- state
-  type state_t is (fetch, decode, fetch_from_ram, service_interrupt);
+  type state_t is (fetch, decode, fetch_from_ram);
   signal cycle, cycle_next : state_t := fetch;
 
   -- current op
-  type op_t is (OP_ALU, OP_SHIFT, OP_LOGIC, OP_LOAD, OP_FETCH, OP_STORE, OP_OUTPUT, OP_INPUT, OP_RETURNI, NOP);
+  type op_t is (OP_ALU, OP_SHIFT, OP_LOGIC, OP_LOAD, OP_FETCH, OP_STORE,
+                OP_OUTPUT, OP_INPUT, OP_RETURNI, OP_INTERRUPT, NOP);
   signal current_op : op_t;
 
   -- interrupt op
@@ -204,7 +205,6 @@ begin
   -- mutiplex next interrupt flag
   I_next <= '0' when interrupt_op = INTERRUPT_DISABLE else
             '1' when interrupt_op = INTERRUPT_ENABLE else
-            '0' when cycle = service_interrupt else
             I;
 
   -- assign scratchpad ram
@@ -218,7 +218,8 @@ begin
 
   -- assign callstack ram
 
-  callstack_ram_data_in <= std_logic_vector(to_unsigned(pc, 10) + 1);  -- we always write next PC into callstack ram
+  callstack_ram_data_in <= std_logic_vector(to_unsigned(pc, 10)) when current_op = OP_INTERRUPT
+                           else std_logic_vector(to_unsigned(pc, 10) + 1);  -- we always write next PC into callstack ram
 
   callstack_ram_wr_addr_next <= callstack_ram_wr_addr + 1 when callstack_op = CALLSTACK_PUSH else
                                 callstack_ram_wr_addr - 1 when callstack_op = CALLSTACK_POP else
@@ -518,7 +519,7 @@ begin
 
   -- instruction decode
 
-  process (cycle, pc, register_bank, instruction, C, C_pres, Z, Z_pres, I)
+  process (cycle, pc, register_bank, instruction, C, C_pres, Z, Z_pres, I, interrupt)
   begin
 
     -- assign defaults
@@ -530,8 +531,8 @@ begin
     logic_op     <= "00";               -- and
     op_b_sel     <= OP_B_SEL_REGISTER;
 
-    C_pres_next  <= C_pres;
-    Z_pres_next  <= Z_pres;
+    C_pres_next <= C_pres;
+    Z_pres_next <= Z_pres;
 
     interrupt_ack <= '0';
 
@@ -545,132 +546,131 @@ begin
         fc_call_return <= FC_INC;
 
         if (interrupt = '1' and I = '1') then
-          cycle_next <= service_interrupt;
+          C_pres_next    <= C;
+          Z_pres_next    <= Z;
+          fc_call_return <= FC_INTERRUPT;
+          current_op     <= OP_INTERRUPT;
+          interrupt_op   <= INTERRUPT_DISABLE;
+          interrupt_ack  <= '1';
+        else
+          case instruction(17 downto 14) is
+            when "0000" =>              -- load
+              current_op <= OP_LOAD;
+              op_b_sel   <= instruction(12);
+            when "0001" =>              -- input, fetch
+              case instruction (13 downto 12) is
+                when "00" =>            -- INPUT,"sX,pp"
+                  op_b_sel   <= OP_B_SEL_LITERAL;
+                  current_op <= OP_INPUT;
+                when "01" =>            -- INPUT,"sX,(sY)"
+                  op_b_sel   <= OP_B_SEL_REGISTER;
+                  current_op <= OP_INPUT;
+                when "10" =>            -- FETCH,"sX,kk"
+                  op_b_sel       <= OP_B_SEL_LITERAL;
+                  current_op     <= OP_FETCH;
+                  cycle_next     <= fetch_from_ram;
+                  fc_call_return <= FC_NOP;
+                when "11" =>            -- FETCH,"sX,(sY)"
+                  op_b_sel       <= OP_B_SEL_REGISTER;
+                  current_op     <= OP_FETCH;
+                  cycle_next     <= fetch_from_ram;
+                  fc_call_return <= FC_NOP;
+                when others =>
+              end case;
+            when "0010" =>              -- and
+              op_b_sel   <= instruction(12);
+              current_op <= OP_LOGIC;
+              logic_op   <= "00";
+            when "0011" =>              -- or, xor
+              current_op <= OP_LOGIC;
+              op_b_sel   <= instruction(12);
+              if (instruction(13) = '0') then
+                logic_op <= "01";       -- or
+              else
+                logic_op <= "10";       -- xor
+              end if;
+            when "0100" =>              -- test
+              op_b_sel   <= instruction(12);
+              current_op <= OP_LOGIC;
+              logic_op   <= "11";
+            when "0101" =>              -- compare
+              op_b_sel   <= instruction(12);
+              current_op <= OP_ALU;
+              alu_op     <= "100";
+            when "0110" =>              -- add
+              op_b_sel   <= instruction(12);
+              current_op <= OP_ALU;
+              if (instruction(13) = '0') then
+                alu_op <= "000";
+              else
+                alu_op <= "001";        -- add with carry
+              end if;
+            when "0111" =>              -- sub
+              op_b_sel   <= instruction(12);
+              current_op <= OP_ALU;
+              if (instruction(13) = '0') then
+                alu_op <= "010";
+              else
+                alu_op <= "011";        -- sub with borrow
+              end if;
+            when "1000" =>              -- shift / rotate
+              current_op <= OP_SHIFT;
+              shift_op   <= instruction(3 downto 0);
+            when "1001" =>
+              null;
+            when "1010" =>              -- return
+              fc_call_return <= FC_RETURN;
+              fc_op          <= instruction(12 downto 10);
+            when "1011" =>              -- output / store
+              case instruction(13 downto 12) is
+                when "00" =>            -- OUTPUT sX, pp
+                  op_b_sel   <= OP_B_SEL_LITERAL;
+                  current_op <= OP_OUTPUT;
+                when "01" =>            -- OUTPUT sX, (sY)
+                  op_b_sel   <= OP_B_SEL_REGISTER;
+                  current_op <= OP_OUTPUT;
+                when "10" =>            -- STORE  sX, ss
+                  op_b_sel   <= OP_B_SEL_LITERAL;
+                  current_op <= OP_STORE;
+                when "11" =>            -- STORE  sX, (sY)
+                  op_b_sel   <= OP_B_SEL_REGISTER;
+                  current_op <= OP_STORE;
+                when others =>
+              end case;
+            when "1100" =>              -- call
+              fc_call_return <= FC_CALL;
+              fc_op          <= instruction(12 downto 10);
+            when "1101" =>              -- jump
+              fc_call_return <= FC_JUMP;
+              fc_op          <= instruction(12 downto 10);
+            when "1110" =>              -- return from interrupt
+              case instruction(0) is
+                when '0' =>             -- DISABLE INTERRUPT
+                  interrupt_op <= INTERRUPT_DISABLE;
+                when '1' =>             -- ENABLE INTERRUPT
+                  interrupt_op <= INTERRUPT_ENABLE;
+                when others =>
+              end case;
+              fc_call_return <= FC_RETURN;
+              current_op     <= OP_RETURNI;
+              fc_op          <= "000";
+            when "1111" =>              -- interrupt enable / disable
+              case instruction(0) is
+                when '0' =>             -- DISABLE INTERRUPT
+                  interrupt_op <= INTERRUPT_DISABLE;
+                when '1' =>             -- ENABLE INTERRUPT
+                  interrupt_op <= INTERRUPT_ENABLE;
+                when others =>
+              end case;
+            when others =>
+          end case;
         end if;
-        
-        case instruction(17 downto 14) is
-          when "0000" =>                -- load
-            current_op <= OP_LOAD;
-            op_b_sel   <= instruction(12);
-          when "0001" =>                -- input, fetch
-            case instruction (13 downto 12) is
-              when "00" =>              -- INPUT,"sX,pp"
-                op_b_sel   <= OP_B_SEL_LITERAL;
-                current_op <= OP_INPUT;
-              when "01" =>              -- INPUT,"sX,(sY)"
-                op_b_sel   <= OP_B_SEL_REGISTER;
-                current_op <= OP_INPUT;
-              when "10" =>              -- FETCH,"sX,kk"
-                op_b_sel       <= OP_B_SEL_LITERAL;
-                current_op     <= OP_FETCH;
-                cycle_next     <= fetch_from_ram;
-                fc_call_return <= FC_NOP;
-              when "11" =>              -- FETCH,"sX,(sY)"
-                op_b_sel       <= OP_B_SEL_REGISTER;
-                current_op     <= OP_FETCH;
-                cycle_next     <= fetch_from_ram;
-                fc_call_return <= FC_NOP;
-              when others =>
-            end case;
-          when "0010" =>                -- and
-            op_b_sel   <= instruction(12);
-            current_op <= OP_LOGIC;
-            logic_op   <= "00";
-          when "0011" =>                -- or, xor
-            current_op <= OP_LOGIC;
-            op_b_sel   <= instruction(12);
-            if (instruction(13) = '0') then
-              logic_op <= "01";         -- or
-            else
-              logic_op <= "10";         -- xor
-            end if;
-          when "0100" =>                -- test
-            op_b_sel   <= instruction(12);
-            current_op <= OP_LOGIC;
-            logic_op   <= "11";
-          when "0101" =>                -- compare
-            op_b_sel   <= instruction(12);
-            current_op <= OP_ALU;
-            alu_op     <= "100";
-          when "0110" =>                -- add
-            op_b_sel   <= instruction(12);
-            current_op <= OP_ALU;
-            if (instruction(13) = '0') then
-              alu_op <= "000";
-            else
-              alu_op <= "001";          -- add with carry
-            end if;
-          when "0111" =>                -- sub
-            op_b_sel   <= instruction(12);
-            current_op <= OP_ALU;
-            if (instruction(13) = '0') then
-              alu_op <= "010";
-            else
-              alu_op <= "011";          -- sub with borrow
-            end if;
-          when "1000" =>                -- shift / rotate
-            current_op <= OP_SHIFT;
-            shift_op   <= instruction(3 downto 0);
-          when "1001" =>
-            null;
-          when "1010" =>                -- return
-            fc_call_return <= FC_RETURN;
-            fc_op          <= instruction(12 downto 10);
-          when "1011" =>                -- output / store
-            case instruction(13 downto 12) is
-              when "00" =>              -- OUTPUT sX, pp
-                op_b_sel   <= OP_B_SEL_LITERAL;
-                current_op <= OP_OUTPUT;
-              when "01" =>              -- OUTPUT sX, (sY)
-                op_b_sel   <= OP_B_SEL_REGISTER;
-                current_op <= OP_OUTPUT;
-              when "10" =>              -- STORE  sX, ss
-                op_b_sel   <= OP_B_SEL_LITERAL;
-                current_op <= OP_STORE;
-              when "11" =>              -- STORE  sX, (sY)
-                op_b_sel   <= OP_B_SEL_REGISTER;
-                current_op <= OP_STORE;
-              when others =>
-            end case;
-          when "1100" =>                -- call
-            fc_call_return <= FC_CALL;
-            fc_op          <= instruction(12 downto 10);
-          when "1101" =>                -- jump
-            fc_call_return <= FC_JUMP;
-            fc_op          <= instruction(12 downto 10);
-          when "1110" =>                -- return from interrupt
-            case instruction(0) is
-              when '0' =>               -- DISABLE INTERRUPT
-                interrupt_op <= INTERRUPT_DISABLE;
-              when '1' =>               -- ENABLE INTERRUPT
-                interrupt_op <= INTERRUPT_ENABLE;
-              when others =>
-            end case;
-            fc_call_return <= FC_RETURN;
-            current_op     <= OP_RETURNI;
-            fc_op <= "000"; 
-          when "1111" =>                -- interrupt enable / disable
-            case instruction(0) is
-              when '0' =>               -- DISABLE INTERRUPT
-                interrupt_op <= INTERRUPT_DISABLE;
-              when '1' =>               -- ENABLE INTERRUPT
-                interrupt_op <= INTERRUPT_ENABLE;
-              when others =>
-            end case;
-          when others =>
-        end case;
-        
+
       when fetch_from_ram =>
         cycle_next     <= fetch;
         fc_call_return <= FC_INC;
         current_op     <= OP_FETCH;
 
-      when service_interrupt =>
-        cycle_next     <= fetch;
-        C_pres_next    <= C;
-        Z_pres_next    <= Z;
-        fc_call_return <= FC_INTERRUPT;
-        interrupt_ack  <= '1';
     end case;
   end process;
 
