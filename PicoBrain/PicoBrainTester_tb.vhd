@@ -106,7 +106,7 @@ begin
 
 	 for i in 0 to 7 loop
 		 tb_key(1) <= '0';
-		 wait for 100ns;
+		 wait for 40ns;
 		 tb_key(1) <= '1';
 		 wait for 1ms;
 	end loop;
