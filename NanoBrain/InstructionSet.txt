@@ -226,6 +226,10 @@ IO   NA stspr rx:rx+1,SPRy| 1  1  0  1  1  0  x  x  x  0  0  0  y  y  y  y  |  s
                                                                              x = 0, r0:r1, x = 1, r2:r3 which are loaded from SPR yyyy.
                                                                              In the case of the floating point registers, the raw contents
                                                                              (IEEE floating point representation) is transferred.
+IO   NA cmpxchg		  | 1  1  0  1  1  1  x  x  x  x  y  y  y  y  z  z  | compare rx with [IDz]. IDz must be word aligned, or else an 
+								              unaligned access exception will occur. If rx = [IDz], zero flag
+									      is set and ry is stored at [IDz]. Else zero flag is cleared and
+									      value of [IDz] is stored into rx.
 
 IO  NA  ldb r0/r1,[eee]   | 1  1  1  0  0  x  e  e  e  e  e  e  e  e  e  e  |  load byte at eee (extendable to 24 bits) into x (r0 or r1) low byte   
 IO  NA  ldb rx,[IDy + b]  | 1  1  1  0  1  0  x  x  x  x  y  y  b  b  b  b  |  load byte at (IDy + b) into xxx
