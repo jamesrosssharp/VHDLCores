@@ -1,0 +1,234 @@
+
+Registers
+---------
+
+        User registers
+
+        r0      Memory load / general purpose
+        r1      Memory load / general purpose
+        r2      General purpose
+        r3      General purpose
+        r4      General purpose
+        r5      General purpose
+        r6      General purpose
+        r7      General purpose 
+        r8      General purpose
+        r9      General purpose
+        ra      General purpose
+        rb      General purpose
+        rc      General purpose 
+        rd      General purpose
+        re      Multiplication result / dividend / General purpose 
+        rf      Multiplication result / dividend / General purpose 
+
+        Special pupose registers (32 bits)
+
+        spr0           MSR    Machine status word
+
+           Bit            Mnemonic     Function                             
+
+           0       rw    I           Set to '1' to enable interrupts, '0' to disable interrupts                      
+           1       rw    E           Set to '1' to enable exceptions, '0' to disable exceptions
+           2       rw    VM          '1' = mmu enabled, '0' = disabled
+           3       rw    UM          '1' = user mode, '0' = kernel mode
+           4       rw    VMS         virtual mode save (VM saved when entering interrupt or exeption)
+           5       rw    UMS         user mode save
+
+           16 - 19 ro    EC           Exception code
+                                       0000 : no exception
+                                       0001 : div by 0
+                                       0010 : unaligned access
+                                       0011 : illegal opcode
+                                       others : reserved
+                                                                         
+           29       ro    Z             zero flag
+           30       ro    C             carry flag
+           31       ro    EIP           exception in progress (when '1', interrupts will not be serviced, clear with returne)
+
+
+        spr1           LR            Link register
+        spr2           ILR           Interrupt link register
+        spr3           ELR           Exception link register
+        spr4           CC            Cache control
+        spr5           VBAR          base address for interrupt vectors
+        spr6           EAR           exception address register (faulting address for unaligned access)
+        spr7           CTX           OS context register (or general purpose 32 bit register)            
+        spr8 - b       ID0-ID3       Index registers
+        sprc - sprf    FP0 - FP3     Floating point registers 0 - 3
+
+        MMU TLB (if MMU compiled in)
+
+        pid                      6 bit PID register
+        tlb0 - tlb31             32x 32 bit TLB entries:
+                     Bit         Purpose
+                     0 - 13      Page base address (must be aligned to page size)
+                     14 - 15     Page size
+                                 00  - 1k
+                                 01  - 4k
+                                 10  - 16k
+                                 11  - 64k
+                     16 - 21     pid
+                     22          icache enable ('1' = enable, '0' = disable)
+                     23          dcache enable ('1' = enable, '0' = disable)
+                     24          writeable? ('1' = writeable, '0' = read only)
+                     25          executable? ('1' = executable, '0' = non-executable)
+                     Others      reserved
+        
+Interrupt vector table
+----------------------
+
+Must be located at word aligned address, as only 23 bits can be stored in VBAR.
+Each entry has room for two instructions, as per microblaze, so an imm instruction
+followed by a jump instruction can be used to fill it.
+
+     Vectors
+
+     VBAR + 0        Reset
+     VBAR + 4        Interrupt
+     VBAR + 8        Exception
+     VBAR + C        SVC (supervisory call)
+
+Ports
+-----
+
+None, uses memory mapping instead
+
+FPU
+---
+
+4 registers, only simple ops (FPU can be configured out)
+
+Barrel shifter
+-------------
+
+Optional
+
+MMU
+---
+
+32 word TLB, software managed (similar to microblaze)
+
+
+Op codes
+--------
+
+88 Instructions
+
+C = class (IMM = immediate, ALU = alu, FC = flow control, IO = memory access / special purpose registers)
+U = unit (C = CPU main, IP = integer pipeline, BS = barrel shifter, FP = floating point unit)
+
+C    U  Opcodes        Bit 15 14 13 12 11 10 09 08 07 06 05 04 03 02 01 00
+IMM  C  imm  kkk          | 0  0  a  a  a  a  a  a  a  a  a  a  a  a  a  a |      Used to load upper 14 bits for addresses
+                                                                                and upper 12 bits for immediate values
+ALU  IP add rx, ry        | 0  1  0  0  0  0  0  0  x  x  x  x  y  y  y  y |
+ALU  IP add rx, kkk       | 0  1  1  0  0  0  0  0  x  x  x  x  b  b  b  b |      Add 4 bit immediate to rx. 16 bits can be made
+                                                                                up with preceding imm instruction
+ALU  IP adc rx, ry        | 0  1  0  1  0  0  0  0  x  x  x  x  y  y  y  y
+ALU  IP adc rx, kkk       | 0  1  1  1  0  0  0  0  x  x  x  x  b  b  b  b 
+ALU  IP sub rx, ry        | 0  1  0  0  1  0  0  0  x  x  x  x  y  y  y  y
+ALU  IP sub rx, kkk       | 0  1  1  0  1  0  0  0  x  x  x  x  b  b  b  b
+ALU  IP sbb rx, ry        | 0  1  0  1  1  0  0  0  x  x  x  x  y  y  y  y 
+ALU  IP sbb rx, kkk       | 0  1  1  1  1  0  0  0  x  x  x  x  b  b  b  b
+ALU  IP and rx, ry        | 0  1  0  0  0  1  0  0  x  x  x  x  y  y  y  y 
+ALU  IP and rx, kkk       | 0  1  1  0  0  1  0  0  x  x  x  x  b  b  b  b
+ALU  IP or  rx, ry        | 0  1  0  1  0  1  0  0  x  x  x  x  y  y  y  y
+ALU  IP or  rx, kkk       | 0  1  1  1  0  1  0  0  x  x  x  x  b  b  b  b 
+ALU  IP xor rx, ry        | 0  1  0  0  1  1  0  0  x  x  x  x  y  y  y  y
+ALU  IP xor rx, kkk       | 0  1  1  0  1  1  0  0  x  x  x  x  k  k  k  k
+ALU  IP sla rx            | 0  1  0  1  1  1  0  0  x  x  x  x  0  0  0  0  |     shift left from carry
+ALU  IP slx rx            | 0  1  0  1  1  1  0  0  x  x  x  x  0  0  0  1  |     shift left, extend bit 0
+ALU  IP sl0 rx            | 0  1  0  1  1  1  0  0  x  x  x  x  0  0  1  0  |     shift left, shift in 0
+ALU  IP sl1 rx            | 0  1  0  1  1  1  0  0  x  x  x  x  0  0  1  1  |     shift left, shift in 1
+ALU  IP rl  rx            | 0  1  0  1  1  1  0  0  x  x  x  x  0  1  0  0  |     rotate left through carry
+ALU  IP sra rx            | 0  1  1  1  1  1  0  0  x  x  x  x  0  0  0  0
+ALU  IP srx rx            | 0  1  1  1  1  1  0  0  x  x  x  x  0  0  0  1
+ALU  IP sr0 rx            | 0  1  1  1  1  1  0  0  x  x  x  x  0  0  1  0
+ALU  IP sr1 rx            | 0  1  1  1  1  1  0  0  x  x  x  x  0  0  1  1
+ALU  IP rr  rx            | 0  1  1  1  1  1  0  0  x  x  x  x  0  1  0  0        
+ALU  IP cmp  rx, ry       | 0  1  0  0  0  0  1  0  x  x  x  x  y  y  y  y
+ALU  IP cmp  rx, bbb      | 0  1  1  0  0  0  1  0  x  x  x  x  b  b  b  b
+ALU  IP test rx, ry       | 0  1  0  1  0  0  1  0  x  x  x  x  y  y  y  y
+ALU  IP test rx, bbb      | 0  1  1  1  0  0  1  0  x  x  x  x  b  b  b  b
+ALU  IP load rx, ry       | 0  1  0  0  1  0  1  0  x  x  x  x  y  y  y  y
+ALU  IP load rx, bbb      | 0  1  1  0  1  0  1  0  x  x  x  x  b  b  b  b
+ALU  IP mul  rx, ry       | 0  1  0  0  0  1  1  0  x  x  x  x  y  y  y  y  | multiply rx and ry, result stored in re:rf
+ALU  IP mul  rx, bbb      | 0  1  1  0  0  1  1  0  x  x  x  x  b  b  b  b
+ALU  IP muls rx, ry       | 0  1  0  1  0  1  1  0  x  x  x  x  y  y  y  y
+ALU  IP muls rx, bbb      | 0  1  1  1  0  1  1  0  x  x  x  x  b  b  b  b
+ALU  IP div  rx, ry       | 0  1  0  0  1  1  1  0  x  x  x  x  y  y  y  y  |  divide re:rf by ry and store result in rx
+ALU  IP div  rx, bbb      | 0  1  1  0  1  1  1  0  x  x  x  x  b  b  b  b
+ALU  IP divs rx, ry       | 0  1  0  1  1  1  1  0  x  x  x  x  y  y  y  y
+ALU  IP divs rx, bbb      | 0  1  1  1  1  1  1  0  x  x  x  x  b  b  b  b
+       
+ALU  BS bsl               | 0  1  0  0  0  0  0  1  x  x  x  x  b  b  b  b  | Barrel shift left b + 1 places through carry bit   
+ALU  BS bsr               | 0  1  1  0  0  0  0  1  x  x  x  x  b  b  b  b    
+
+ALU  FP fmul              | 0  1  0  0  0  0  1  1  0  0  0  0  u  u  v  v   
+ALU  FP fdiv              | 0  1  1  0  0  0  1  1  0  0  0  0  u  u  v  v
+ALU  FP fadd              | 0  1  0  1  0  0  1  1  0  0  0  0  u  u  v  v
+ALU  FP fsub              | 0  1  1  1  0  0  1  1  0  0  0  0  u  u  v  v
+ALU  FP fcmp              | 0  1  0  0  1  0  1  1  0  0  0  0  u  u  v  v
+ALU  FP fint              | 0  1  1  0  1  0  1  1  0  0  0  0  u  u  0  0  | convert register from IEEE floating point representation to integer
+ALU  FP fflt              | 0  1  0  1  1  0  1  1  0  0  0  0  u  u  0  0  | convert from integer to IEEE floating point representation
+
+FC   NA jump              | 1  0  0  0  0  1  0  c  c  c  c  c  c  c  c  c  | jump to absolute address, contains 9 bit immediate which
+                                                                            can be extended to 24 bits (bit 0 is don't care)
+                                                                            using the imm instruction
+FC   NA jump nz           | 1  0  0  0  0  0  0  c  c  c  c  c  c  c  c  c
+FC   NA jump z            | 1  0  0  1  0  0  0  c  c  c  c  c  c  c  c  c
+FC   NA jump nc           | 1  0  0  0  1  0  0  c  c  c  c  c  c  c  c  c
+FC   NA jump c            | 1  0  0  1  1  0  0  c  c  c  c  c  c  c  c  c
+FC   NA jump rel          | 1  0  0  0  0  1  1  c  c  c  c  c  c  c  c  c  | relative jump by kkkk (-256 ... 255 - signed) 
+FC   NA jump rel nz       | 1  0  0  0  0  0  1  c  c  c  c  c  c  c  c  c
+FC   NA jump rel z        | 1  0  0  1  0  0  1  c  c  c  c  c  c  c  c  c
+FC   NA jump rel nc       | 1  0  0  0  1  0  1  c  c  c  c  c  c  c  c  c
+FC   NA jump rel c        | 1  0  0  1  1  0  1  c  c  c  c  c  c  c  c  c
+FC   NA call              | 1  0  1  0  0  1  0  c  c  c  c  c  c  c  c  c 
+FC   NA call nz           | 1  0  1  0  0  0  0  c  c  c  c  c  c  c  c  c
+FC   NA call z            | 1  0  1  1  0  0  0  c  c  c  c  c  c  c  c  c
+FC   NA call nc           | 1  0  1  0  1  0  0  c  c  c  c  c  c  c  c  c
+FC   NA call c            | 1  0  1  1  1  0  0  c  c  c  c  c  c  c  c  c
+FC   NA call rel          | 1  0  1  0  0  1  1  c  c  c  c  c  c  c  c  c  | relative call by kkkk (-256 ... 255 - signed) 
+FC   NA call rel nz       | 1  0  1  0  0  0  1  c  c  c  c  c  c  c  c  c
+FC   NA call rel z        | 1  0  1  1  0  0  1  c  c  c  c  c  c  c  c  c
+FC   NA call rel nc       | 1  0  1  0  1  0  1  c  c  c  c  c  c  c  c  c
+FC   NA call rel c        | 1  0  1  1  1  0  1  c  c  c  c  c  c  c  c  c
+
+FC   NA svc               | 1  0  0  1  1  1  1  0  0  0  0  0  0  0  0  0  | supervisory call
+
+FC   NA ret               | 1  0  1  1  1  1  1  0  0  0  0  0  0  0  0  0  | return to address pointed to by link register 
+FC   NA reti              | 1  0  1  1  1  1  1  0  0  0  0  0  0  0  0  1  | return to address register pointed to by link register for interrupts
+                                                                           and enable interrupts
+FC   NA rete              | 1  0  1  1  1  1  1  0  0  0  0  0  0  0  1  0  | return from exception
+
+IO   NA ldw r0/r1, ccc    | 1  1  0  0  0  0  x  c  c  c  c  c  c  c  c  c  |  load register x (r0 or r1) from [kkkkk]
+                                                                           (can extend to 24 bits using imm instruction)
+IO   NA ldw rx, [IDy + 2b]| 1  1  0  0  0  1  x  x  x  x  y  y  b  b  b  b  |  load register x from address pointed to by
+                                                                             [IDy + bbb * 2], k unsigned.
+IO   NA ldspr rx:rx+1,SPRy| 1  1  0  0  1  0  x  x  x  0  0  0  y  y  y  y  |  load registers from special purpose register. That is xxx adresses
+                                                                             two registers, i.e.
+                                                                             x = 0, r0:r1, x = 1, r2:r3 which are loaded from SPR yyyy.
+                                                                             In the case of the floating point registers, the raw contents
+                                                                             (IEEE floating point representation) is transferred.
+IO   NA incpr  IDy        | 1  1  0  0  1  0  0  0  0  0  1  0  0  0  y  y  |  increment index register (note this adds 1, so unaligned access may
+                                                                             occur)
+IO   NA wincpr IDy        | 1  1  0  0  1  0  0  0  0  1  1  0  0  0  y  y  |  word increment, i.e. IDy = IDy + 2                         
+IO   NA decpr  IDy        | 1  1  0  0  1  0  0  0  0  0  1  1  0  0  y  y  |  decrement index register
+IO   NA wdecpr IDy        | 1  1  0  0  1  0  0  0  0  1  1  1  0  0  y  y  |  word decrement index register
+
+IO   NA ldpid             | 1  1  0  0  1  1  0  0  x  x  x  x  0  0  0  0  |  load first 6 bits of rx into pid register
+
+IO   NA ldtlb             | 1  1  0  0  1  1  1  0  x  x  x  d  d  d  d  d  |  load tlb entry dddd from registers: x = 0, r0:r1, x = 1, r2:r3 etc.
+IO   NA stw r0/r1, ccc    | 1  1  0  1  0  0  x  c  c  c  c  c  c  c  c  c  |  store register x (r0 or r1) to [kkkk] 
+IO   NA stw rx, [IDy + 2b]| 1  1  0  1  0  1  x  x  x  x  y  y  b  b  b  b  |  store register x to address pointed to by [IDy + kkk * 2]
+IO   NA stspr rx:rx+1,SPRy| 1  1  0  1  1  0  x  x  x  0  0  0  y  y  y  y  |  store registers to special purpose register. That is xxx adresses
+                                                                             two registers, i.e.
+                                                                             x = 0, r0:r1, x = 1, r2:r3 which are loaded from SPR yyyy.
+                                                                             In the case of the floating point registers, the raw contents
+                                                                             (IEEE floating point representation) is transferred.
+
+IO  NA  ldb r0/r1,[eee]   | 1  1  1  0  0  x  e  e  e  e  e  e  e  e  e  e  |  load byte at eee (extendable to 24 bits) into x (r0 or r1) low byte   
+IO  NA  ldb rx,[IDy + b]  | 1  1  1  0  1  0  x  x  x  x  y  y  b  b  b  b  |  load byte at (IDy + b) into xxx
+IO  NA  stb r0/r1,[eee]   | 1  1  1  1  0  x  e  e  e  e  e  e  e  e  e  e  |  store byte in rx to eee (extendable to 24 bits)    
+IO  NA  stb rx,[IDy + b]  | 1  1  1  1  1  0  x  x  x  x  y  y  b  b  b  b  |  store byte in rx to (IDy + b) into xxx
+
