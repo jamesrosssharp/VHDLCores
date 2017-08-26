@@ -1,0 +1,51 @@
+
+Pipeline stages
+---------------
+
+5 stage RISC pipeline:
+
+  1       2        3          4        5 
+Fetch - Decode - Execute - Memory - Writeback
+
+Hazards
+-------
+
+To compute hazards, memory address written to, and register written to, must be tracked.
+If an instruction accesses the saved addresses or registers, the pipeline will stall.
+A nop will be inserted into the pipeline (bubble) at the decode stage and the PC will not advance.
+Hence the same instruction will be decoded until the hazard clears.
+
+If the instruction to be fetched is at an address that is marked as "hot", the PC will not advance and a nopwill be inserted at the fetch stage, which will be decoded as nop, causing a pipeline bubble until the memory address is removed from the "hot" list.
+
+In order to prevent pipeline stall with instruction sequences such as :-
+
+	cmp r0, 0
+	jump nz 1
+	...
+1:
+
+The flags (Z, C) are updated in the execute stage. Similarly the imm instruction must update the
+internal IMM 14-bit register in the execute stage, so it can be accessed on the following execute 
+cycle to prevent pipeline stalls.
+
+Branch prediction
+-----------------
+
+A simple table of the last four branches and their targets is used to prevent pipeline stalls in tight loops. If the branch prediction fails, the entire pipeline will be flush and reloaded from the new PC.
+
+Cache
+-----
+
+
+Caching is used to speed up memory accesses in stages 1 and 4. This consists of L1 and L2 caches.
+
+L1 is a single cache line (8 bytes, 4 16-bit words) stored for stage one and similarly to stage four. L1 cache policy is writeback. The L1 cache can be accessed single cycle. If the L1 cache misses, data must be fetched from the L2 cache.
+
+L2 cache is dual-port, i.e. caches combined instruction / data memory but allows concurrent access. It takes a cycle to access the L2 cache and another cycle to determine whether it hit or miss. If the cache misses (or are disabled) the pipeline will not advance until the memory access completes. L2 cache is configurable in size, typically 512x4x16 bit data, with 13 bit tag / valid data (77 bits per cache entry).  
+
+Only when instruction and data caches hit can the CPU run at maximum capacity. If both miss, depending on configuration, the accesses will compete for memory bandwidth. 
+
+Clockrate
+---------
+
+Aim is for 50+ D-Mips from 70 - 100MHz clock. (?)
