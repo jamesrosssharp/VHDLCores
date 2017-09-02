@@ -1,5 +1,5 @@
 --
---      L1Cache.vhd : configurable L1 cache that implemented in FPGA fabric
+--      L1Cache.vhd : configurable L1 cache implemented in FPGA fabric
 --      (not synchronous block ram)
 --
 --      Note: can address a byte (e.g. 8 bits), or a word (e.g. 16 bits), selectable
@@ -64,7 +64,7 @@ architecture RTL of L1Cache is
     ADDRESS_WIDTH - CACHE_LINE_NUM_BITS - CACHE_LINE_WIDTH_BITS;
   constant CACHE_LINE_SIZE_BITS : natural :=
     2**CACHE_LINE_WIDTH_BITS * BYTE_WIDTH + TAG_WIDTH + 2;  -- plus valid and
-                                                               -- dirty bits
+                                                            -- dirty bits
   constant CACHE_LINE_FIRST_DATA_BIT : natural := 0;
   constant CACHE_LINE_LAST_DATA_BIT  : natural := 2**CACHE_LINE_WIDTH_BITS * BYTE_WIDTH - 1;
   constant CACHE_LINE_FIRST_TAG_BIT  : natural := CACHE_LINE_LAST_DATA_BIT + 1;
@@ -158,8 +158,8 @@ architecture RTL of L1Cache is
   end function get_word_from_cache_line;
 
   function create_cache_line_from_byte (cache_line : cacheline_t;
-													 byte     : std_logic_vector (BYTE_WIDTH - 1 downto 0);
-                                        sel_byte : unsigned (CACHE_LINE_WIDTH_BITS - 1 downto 0))
+                                        byte       : std_logic_vector (BYTE_WIDTH - 1 downto 0);
+                                        sel_byte   : unsigned (CACHE_LINE_WIDTH_BITS - 1 downto 0))
     return cacheline_t is
     variable cache_line_next : cacheline_t;
   begin
@@ -177,8 +177,8 @@ architecture RTL of L1Cache is
   end function create_cache_line_from_byte;
 
   function create_cache_line_from_word (cache_line : cacheline_t;
-													 word     : std_logic_vector (word_WIDTH - 1 downto 0);
-                                        sel_byte : unsigned (CACHE_LINE_WORD_BITS - 1 downto 0))
+                                        word       : std_logic_vector (word_WIDTH - 1 downto 0);
+                                        sel_byte   : unsigned (CACHE_LINE_WORD_BITS - 1 downto 0))
     return cacheline_t is
     variable cache_line_next : cacheline_t;
   begin
@@ -218,8 +218,6 @@ begin
       for i in 2**CACHE_LINE_NUM_BITS - 1 downto 0 loop
         cache_array(0)(CACHE_LINE_VALID_BIT) <= '0';
       end loop;
-
-
     elsif rising_edge(clk) then
       state              <= next_state;
       read_return_state  <= read_return_state_next;
@@ -233,7 +231,7 @@ begin
   process (state, rd_req, wr_req, address, sel_cache_line, data_sel, sel_byte, sel_word,
            read_return_state, flush_return_state, sel_tag, cache_tag, cache_valid, cache_dirty,
            sel_cache_line_next, flush_req, wr_data, sel_cache_line_idx, wr_ready_ds, rd_ready_ds,
-			  rd_data_ds, flush_done_ds)
+           rd_data_ds, flush_done_ds)
   begin
 
     cache_wr <= '0';
@@ -253,11 +251,10 @@ begin
     rd_ready   <= '0';
     wr_ready   <= '0';
     flush_done <= '0';
-	 
-	 rd_data <= (others => '0');
-	 wr_data_ds <= (others => '0');
-	 flush_req_ds <= '0';
 
+    rd_data      <= (others => '0');
+    wr_data_ds   <= (others => '0');
+    flush_req_ds <= '0';
 
     case state is
       when idle =>
@@ -372,7 +369,7 @@ begin
 
       when flushDownstreamCache =>
 
-		  address_ds(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_TAG_BIT)                       <= cache_tag;
+        address_ds(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_TAG_BIT)                       <= cache_tag;
         address_ds(ADDRESS_LAST_CACHE_LINE_SEL_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT) <= sel_cache_line_idx;
 
         flush_req_ds <= '1';
