@@ -4,8 +4,8 @@ Pipeline stages
 
 5 stage RISC pipeline:
 
-  1       2        3          4        5 
-Fetch - Decode - Execute - Memory - Writeback
+  1       2        3          	           4              5 
+Fetch - Decode - Execute 	 - Memory read	    - Writeback / memory write
 
 Hazards
 -------
@@ -37,15 +37,37 @@ Cache
 -----
 
 
-Caching is used to speed up memory accesses in stages 1 and 4. This consists of L1 and L2 caches.
+Caching is used to speed up memory accesses in stages 1 and 4.
 
-L1 is a single cache line (8 bytes, 4 16-bit words) stored for stage one and similarly to stage four. L1 cache policy is writeback. The L1 cache can be accessed single cycle. If the L1 cache misses, data must be fetched from the L2 cache.
+For performance, cache is a single level, and implemented in block ram. There are separate instruction and data caches, to boot performance.
 
-L2 cache is dual-port, i.e. caches combined instruction / data memory but allows concurrent access. It takes a cycle to access the L2 cache and another cycle to determine whether it hit or miss. If the cache misses (or are disabled) the pipeline will not advance until the memory access completes. L2 cache is configurable in size, typically 512x4x16 bit data, with 13 bit tag / valid data (77 bits per cache entry).  
+For writes to memory, write must be initiated in stage 4 and completed in stage 5, if the cache hits. If the cache misses, the whole pipeline must stall until the entire matching cacheline can be filled from memory.   
 
-Only when instruction and data caches hit can the CPU run at maximum capacity. If both miss, depending on configuration, the accesses will compete for memory bandwidth. 
+To allow multi-cycle reads and writes, the cache is dual port. The pipeline stages access the ports as follows:-
+
+	Port used in each pipeline stage for data memory access
+Stage	4     5
+	-------
+t = 0	0--\  -
+t = 1	1-\ \-0
+t = 2	0  \--1
+
+i.e. the port accessed in stage 4 is used by the same instruction in stage 5 etc. If the cache misses in stage 5, the instruction in stage 4 must remain in stage 4 until the cache line accessed in stage 5 is fetched from memory. Similar for a read.
+
+
 
 Clockrate
 ---------
 
-Aim is for 50+ D-Mips from 70 - 100MHz clock. (?)
+Aim is for 50+ D-Mips from 50 - 72 MHz clock. (?)
+
+
+Dual issue
+----------
+
+To boost performance, there are two instruction pipelines, which can be built with configuration parameter ENABLE_DUAL_ISSUE set to non-zero. For this case PC and PC + 1 are fetched from the same instruction cache each cycle, and there are separate data caches. In this way, instructions can be sequenced which access different parts of memory in each pipeline. Instructions that also do not access the same address or register or access flags (such as conditional calls and jumps, or arithmetic / logical instructions using carry) can be executed in parallel. 
+
+Hazards
+-------
+ 
+
