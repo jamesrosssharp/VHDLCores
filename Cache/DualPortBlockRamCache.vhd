@@ -213,7 +213,7 @@ architecture RTL of DualPortBlockRamCache is
 
   signal wr_cycle_a, wr_cycle_a_next : std_logic;
   signal wr_cycle_b, wr_cycle_b_next : std_logic;
- 
+
   signal cache_read_word, cache_read_word_next : unsigned (CACHE_LINE_WORD_BITS - 1 downto 0);
   constant TERMINAL_CACHE_READ_WORD            : unsigned (CACHE_LINE_WORD_BITS - 1 downto 0) := (others => '1');
 
@@ -369,7 +369,7 @@ begin
   latch_tag_b           <= latch_address_b(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_TAG_BIT);
   latch_byte_b          <= latch_address_b(ADDRESS_LAST_BYTE_BIT downto ADDRESS_FIRST_BYTE_BIT);
   latch_word_b          <= latch_address_b(ADDRESS_LAST_WORD_BIT downto ADDRESS_FIRST_WORD_BIT);
-  
+
   cache_tag_b   <= unsigned(sel_cacheline_b(CACHE_LINE_LAST_TAG_BIT downto CACHE_LINE_FIRST_TAG_BIT));
   cache_valid_b <= sel_cacheline_b(CACHE_LINE_VALID_BIT);
   cache_dirty_b <= sel_cacheline_b(CACHE_LINE_DIRTY_BIT);
@@ -391,9 +391,9 @@ begin
 
     latch_address_a_next <= latch_address_a;
     latch_address_b_next <= latch_address_b;
-	 
-	 latch_address_a_next(ADDRESS_WIDTH) <= '0';
-	 latch_address_b_next(ADDRESS_WIDTH) <= '0';
+
+    latch_address_a_next(ADDRESS_WIDTH) <= '0';
+    latch_address_b_next(ADDRESS_WIDTH) <= '0';
 
     wr_cycle_a_next <= '0';
     wr_cycle_b_next <= '0';
@@ -482,7 +482,7 @@ begin
               latch_address_a_next <= '0' & address_a;
               wr_cycle_a_next      <= '1';
             else
-				  if (cache_valid_a = '1' and latch_tag_a = cache_tag_a) then
+              if (cache_valid_a = '1' and latch_tag_a = cache_tag_a) then
                                         -- write data
 
                 if (data_sel_a = '0') then
@@ -683,21 +683,21 @@ begin
         invalidate_word_next      <= (others => '0');
         next_state                <= invalidate2;
       when invalidate2 =>
-		  sel_cacheline_idx_mux_sel <= '1';
-			
-		  if (cache_valid_a /= '1') then
-			next_state <= invalidate4; 
-		  else
-			-- request write word to memory
-			wr_req_ds                 <= '1';
-			if (wr_grant_ds = '1') then
-				next_state <= invalidate3;
-			end if;
-			address_ds(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_TAG_BIT)
-				<= cache_tag_a(TAG_WIDTH - 1 downto 0);
-			address_ds(ADDRESS_LAST_CACHE_LINE_SEL_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT)
-				<= invalidate_line;
-			end if;
+        sel_cacheline_idx_mux_sel <= '1';
+
+        if (cache_valid_a /= '1') then
+          next_state <= invalidate4;
+        else
+          -- request write word to memory
+          wr_req_ds <= '1';
+          if (wr_grant_ds = '1') then
+            next_state <= invalidate3;
+          end if;
+          address_ds(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_TAG_BIT)
+            <= cache_tag_a(TAG_WIDTH - 1 downto 0);
+          address_ds(ADDRESS_LAST_CACHE_LINE_SEL_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT)
+            <= invalidate_line;
+        end if;
       when invalidate3 =>
         sel_cacheline_idx_mux_sel <= '1';
         -- write words to memory

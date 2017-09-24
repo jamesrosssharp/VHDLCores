@@ -17,15 +17,15 @@ architecture RTL of DualPortBlockRamCache_tb is
 
   component DualPortBlockRamCache is
     generic (
-      WORD_WIDTH_BITS            : natural;  -- width of data, e.g 16 bit word
-      BYTE_WIDTH_BITS            : natural;  -- width of a byte
+      WORD_WIDTH_BITS       : natural;  -- width of data, e.g 16 bit word
+      BYTE_WIDTH_BITS       : natural;  -- width of a byte
       ADDRESS_WIDTH         : natural;  -- width of address bus
       CACHE_LINE_WIDTH_BITS : natural;  -- number of bits used to represent
-                                             -- cache line size in units of
-                                             -- BYTE_WIDTH, e.g 3 -> 2**3 =
-                                             -- 8 bytes
-      CACHE_LINE_NUM_BITS   : natural  -- E.g. 2**9 = 512 cache lines in
-                                             -- L2 cache.
+                                        -- cache line size in units of
+                                        -- BYTE_WIDTH, e.g 3 -> 2**3 =
+                                        -- 8 bytes
+      CACHE_LINE_NUM_BITS   : natural   -- E.g. 2**9 = 512 cache lines in
+                                        -- L2 cache.
       );
     port (
 
@@ -37,19 +37,19 @@ architecture RTL of DualPortBlockRamCache_tb is
       data_sel_a : in  std_logic;       -- '1', address word (address must be
       -- aligned), '0' address byte
 
-      rd_req_a         : in std_logic;
-      wr_req_a         : in std_logic;
-      flush_req     : in std_logic;  -- flush a single cache line that contains address
-      invalidate_req : in std_logic;  -- invalidate entire cache.
+      rd_req_a       : in std_logic;
+      wr_req_a       : in std_logic;
+      flush_req      : in std_logic;  -- flush a single cache line that contains address
+      invalidate_req : in std_logic;    -- invalidate entire cache.
 
       wr_data_b  : in  std_logic_vector (2**WORD_WIDTH_BITS - 1 downto 0);
       rd_data_b  : out std_logic_vector (2**WORD_WIDTH_BITS - 1 downto 0);
       data_sel_b : in  std_logic;       -- '1', address word (address must be
       -- aligned), '0' address byte
 
-      rd_req_b         : in std_logic;
-      wr_req_b         : in std_logic;
-      
+      rd_req_b : in std_logic;
+      wr_req_b : in std_logic;
+
       bypass : in std_logic;            -- if '1' cache is bypassed, and L1/L2
       -- caches will be held in reset. If
       -- '0', cache is active and cache
@@ -89,9 +89,9 @@ architecture RTL of DualPortBlockRamCache_tb is
       );
   end component;
 
-  constant WORD_WIDTH : natural := 16;
+  constant WORD_WIDTH    : natural := 16;
   constant ADDRESS_WIDTH : natural := 14;
-  
+
   signal tb_clk   : std_logic;
   signal tb_reset : std_logic;
 
@@ -99,26 +99,26 @@ architecture RTL of DualPortBlockRamCache_tb is
   signal tb_rd_data_a  : std_logic_vector (WORD_WIDTH - 1 downto 0);
   signal tb_data_sel_a : std_logic;
 
-  signal tb_rd_req_a         : std_logic := '0';
-  signal tb_wr_req_a         : std_logic := '0';
+  signal tb_rd_req_a       : std_logic := '0';
+  signal tb_wr_req_a       : std_logic := '0';
   signal tb_flush_req      : std_logic := '0';
   signal tb_invalidate_req : std_logic := '0';
-  
+
   signal tb_wr_data_b  : std_logic_vector (WORD_WIDTH - 1 downto 0);
   signal tb_rd_data_b  : std_logic_vector (WORD_WIDTH - 1 downto 0);
   signal tb_data_sel_b : std_logic;
-  
-  signal tb_rd_req_b         : std_logic;
-  signal tb_wr_req_b         : std_logic;
-  
-  signal tb_bypass           : std_logic;
-  
+
+  signal tb_rd_req_b : std_logic;
+  signal tb_wr_req_b : std_logic;
+
+  signal tb_bypass : std_logic;
+
   signal tb_rd_ready_a : std_logic;
   signal tb_wr_ready_a : std_logic;
-  
+
   signal tb_rd_ready_b : std_logic;
   signal tb_wr_ready_b : std_logic;
-  
+
   signal tb_flush_done      : std_logic;
   signal tb_invalidate_done : std_logic;
 
@@ -136,13 +136,13 @@ architecture RTL of DualPortBlockRamCache_tb is
   signal tb_wr_done_ds    : std_logic;
   signal tb_n_rd_ds       : std_logic;
   signal tb_n_wr_ds       : std_logic;
-    
-  signal tb_read_data_a : std_logic_vector(15 downto 0);
+
+  signal tb_read_data_a            : std_logic_vector(15 downto 0);
   signal tb_test_a, tb_test_a_done : std_logic := '0';
- 
-  signal tb_read_data_b : std_logic_vector(15 downto 0);
+
+  signal tb_read_data_b            : std_logic_vector(15 downto 0);
   signal tb_test_b, tb_test_b_done : std_logic := '0';
-  
+
   -- downstream memory
 
   subtype memory_word is std_logic_vector(15 downto 0);
@@ -165,50 +165,50 @@ architecture RTL of DualPortBlockRamCache_tb is
 
 begin
 
-  cache0 : DualPortBlockRamCache 
-  generic map (
-      WORD_WIDTH_BITS            => 4,  
-      BYTE_WIDTH_BITS            => 3,  
-      ADDRESS_WIDTH         => ADDRESS_WIDTH,  
+  cache0 : DualPortBlockRamCache
+    generic map (
+      WORD_WIDTH_BITS       => 4,
+      BYTE_WIDTH_BITS       => 3,
+      ADDRESS_WIDTH         => ADDRESS_WIDTH,
       CACHE_LINE_WIDTH_BITS => 3,
-      CACHE_LINE_NUM_BITS   => 9  
+      CACHE_LINE_NUM_BITS   => 9
       )
-  port map (
-      clk  	=> tb_clk,
-      reset => tb_reset,
-      wr_data_a  => tb_wr_data_a,
-      rd_data_a  => tb_rd_data_a,
-      data_sel_a => tb_data_sel_a,       
-      rd_req_a   => tb_rd_req_a,
-      wr_req_a   => tb_wr_req_a,
-      flush_req     => tb_flush_req, 
-      invalidate_req => tb_invalidate_req,
-      wr_data_b  => tb_wr_data_b,
-      rd_data_b  => tb_rd_data_b,
-      data_sel_b => tb_data_sel_b,       
-      rd_req_b   => tb_rd_req_b,
-      wr_req_b   => tb_wr_req_b,
-      bypass 			  => tb_bypass,            
-      rd_ready_a 		  => tb_rd_ready_a,       
-      wr_ready_a 		  => tb_wr_ready_a,      
-      rd_ready_b 		  => tb_rd_ready_b,    
-      wr_ready_b 		  => tb_wr_ready_b, 
-      flush_done       => tb_flush_done,
-      invalidate_done  => tb_invalidate_done,
-      address_a 		  => tb_address_a,
-      address_b 		  => tb_address_b,
-      address_ds    	  => tb_address_ds,
-      wr_data_ds  	  => tb_wr_data_ds,
-      rd_data_ds    	  => tb_rd_data_ds,
-      burst_size_ds    => tb_burst_size_ds,
-      wr_req_ds        => tb_wr_req_ds,
-      rd_req_ds        => tb_rd_req_ds,
-      wr_grant_ds      => tb_wr_grant_ds, 
-      rd_grant_ds      => tb_rd_grant_ds,
-      wr_done_ds       => tb_wr_done_ds,
-      n_rd_ds          => tb_n_rd_ds,
-      n_wr_ds          => tb_n_wr_ds  
-    );
+    port map (
+      clk             => tb_clk,
+      reset           => tb_reset,
+      wr_data_a       => tb_wr_data_a,
+      rd_data_a       => tb_rd_data_a,
+      data_sel_a      => tb_data_sel_a,
+      rd_req_a        => tb_rd_req_a,
+      wr_req_a        => tb_wr_req_a,
+      flush_req       => tb_flush_req,
+      invalidate_req  => tb_invalidate_req,
+      wr_data_b       => tb_wr_data_b,
+      rd_data_b       => tb_rd_data_b,
+      data_sel_b      => tb_data_sel_b,
+      rd_req_b        => tb_rd_req_b,
+      wr_req_b        => tb_wr_req_b,
+      bypass          => tb_bypass,
+      rd_ready_a      => tb_rd_ready_a,
+      wr_ready_a      => tb_wr_ready_a,
+      rd_ready_b      => tb_rd_ready_b,
+      wr_ready_b      => tb_wr_ready_b,
+      flush_done      => tb_flush_done,
+      invalidate_done => tb_invalidate_done,
+      address_a       => tb_address_a,
+      address_b       => tb_address_b,
+      address_ds      => tb_address_ds,
+      wr_data_ds      => tb_wr_data_ds,
+      rd_data_ds      => tb_rd_data_ds,
+      burst_size_ds   => tb_burst_size_ds,
+      wr_req_ds       => tb_wr_req_ds,
+      rd_req_ds       => tb_rd_req_ds,
+      wr_grant_ds     => tb_wr_grant_ds,
+      rd_grant_ds     => tb_rd_grant_ds,
+      wr_done_ds      => tb_wr_done_ds,
+      n_rd_ds         => tb_n_rd_ds,
+      n_wr_ds         => tb_n_wr_ds
+      );
 
   process
   begin
@@ -219,123 +219,123 @@ begin
   end process;
 
   process
-	variable b1, b2: natural;
-	variable val : std_logic_vector(15 downto 0);
+    variable b1, b2 : natural;
+    variable val    : std_logic_vector(15 downto 0);
   begin
-    tb_reset                <= '0';
+    tb_reset <= '0';
     -- assert reset
     wait for 5*clk_period;
-    tb_reset                <= '1';
+    tb_reset <= '1';
     wait for clk_period;
-    tb_reset                <= '0';
-   
-	 tb_test_a 					 <= '1';
-	 tb_test_b 					 <= '1';
-	 wait until tb_test_a_done = '1' and tb_test_b_done = '1';
-	 tb_invalidate_req <= '1';
-	 wait until tb_invalidate_done = '1';
-	 tb_invalidate_req <= '0';
-	 
-	 for i in 0 to 2**(ADDRESS_WIDTH - 1) - 1 loop
-		b1 := i*2 + 1;
-		b2 := i*2 + 2;
-		val := std_logic_vector(to_unsigned(b2 mod 256, 8)) & std_logic_vector(to_unsigned(b1 mod 256, 8));
-		assert memory(i) = val report "Error verifying memory: " & integer'image(i) & " " & 
-			integer'image(to_integer(unsigned(val))) severity error;
-	 end loop;
-	 
+    tb_reset <= '0';
+
+    tb_test_a         <= '1';
+    tb_test_b         <= '1';
+    wait until tb_test_a_done = '1' and tb_test_b_done = '1';
+    tb_invalidate_req <= '1';
+    wait until tb_invalidate_done = '1';
+    tb_invalidate_req <= '0';
+
+    for i in 0 to 2**(ADDRESS_WIDTH - 1) - 1 loop
+      b1  := i*2 + 1;
+      b2  := i*2 + 2;
+      val := std_logic_vector(to_unsigned(b2 mod 256, 8)) & std_logic_vector(to_unsigned(b1 mod 256, 8));
+      assert memory(i) = val report "Error verifying memory: " & integer'image(i) & " " &
+        integer'image(to_integer(unsigned(val))) severity error;
+    end loop;
+
     wait;
   end process;
-  
-  process 
-	variable cacheline : natural;
-	variable byte : natural;
+
+  process
+    variable cacheline : natural;
+    variable byte      : natural;
   begin
-	wait until tb_test_a = '1';
-	
-	tb_test_a_done <= '0';
-	
-	-- perform test of a port independently from b
-	tb_wr_req_a <= '0';
-	tb_rd_req_a <= '0';
-	tb_data_sel_a <= '0';
-	
-	for i in 0 to 2**(ADDRESS_WIDTH - 1) - 1 loop
-		cacheline := i / 8;
-		byte := i mod 8;
-	
-		wait until tb_clk = '1';
-		tb_address_a <= to_unsigned(cacheline*8*2 + byte, ADDRESS_WIDTH);
-		tb_wr_req_a <= '0';
-		tb_rd_req_a <= '1';
-		wait until tb_rd_ready_a = '1';
-		-- deglitch
-		wait for 5ns;
-		if tb_rd_ready_a /= '1' then
-			wait until tb_rd_ready_a = '1';
-	   end if;
-		wait until tb_clk = '0';
-		wait until tb_clk = '1';
-		tb_read_data_a <= tb_rd_data_a;
-		tb_rd_req_a <= '0';
-		tb_wr_req_a <= '1';
-		wait until tb_clk = '0';
-		wait until tb_clk = '1';
-		tb_wr_data_a <= std_logic_vector(unsigned(tb_read_data_a) + 1);
-		wait until tb_wr_ready_a = '1';
-		wait until tb_clk = '0';
-		wait until tb_clk = '1';
-	end loop;
-	
-	tb_wr_req_a <= '0';
-	
-	tb_test_a_done <= '1';
-	
+    wait until tb_test_a = '1';
+
+    tb_test_a_done <= '0';
+
+    -- perform test of a port independently from b
+    tb_wr_req_a   <= '0';
+    tb_rd_req_a   <= '0';
+    tb_data_sel_a <= '0';
+
+    for i in 0 to 2**(ADDRESS_WIDTH - 1) - 1 loop
+      cacheline := i / 8;
+      byte      := i mod 8;
+
+      wait until tb_clk = '1';
+      tb_address_a <= to_unsigned(cacheline*8*2 + byte, ADDRESS_WIDTH);
+      tb_wr_req_a  <= '0';
+      tb_rd_req_a  <= '1';
+      wait until tb_rd_ready_a = '1';
+      -- deglitch
+      wait for 5ns;
+      if tb_rd_ready_a /= '1' then
+        wait until tb_rd_ready_a = '1';
+      end if;
+      wait until tb_clk = '0';
+      wait until tb_clk = '1';
+      tb_read_data_a <= tb_rd_data_a;
+      tb_rd_req_a    <= '0';
+      tb_wr_req_a    <= '1';
+      wait until tb_clk = '0';
+      wait until tb_clk = '1';
+      tb_wr_data_a   <= std_logic_vector(unsigned(tb_read_data_a) + 1);
+      wait until tb_wr_ready_a = '1';
+      wait until tb_clk = '0';
+      wait until tb_clk = '1';
+    end loop;
+
+    tb_wr_req_a <= '0';
+
+    tb_test_a_done <= '1';
+
   end process;
-  
-  process 
-	variable cacheline : natural;
-	variable byte : natural; 
+
+  process
+    variable cacheline : natural;
+    variable byte      : natural;
   begin
-  wait until tb_test_b = '1';
-	
-	tb_test_b_done <= '0';
-	
-	-- perform test of a port independently from b
-	tb_wr_req_b <= '0';
-	tb_rd_req_b <= '0';
-	tb_data_sel_b <= '0';
-	
-	for i in 0 to 2**(ADDRESS_WIDTH-1) - 1 loop
-		cacheline := i / 8;
-	   byte := i mod 8;
-    	wait until tb_clk = '1';
-		tb_address_b <= to_unsigned((cacheline*2 + 1)*8 + byte, ADDRESS_WIDTH);
-		tb_wr_req_b <= '0';
-		tb_rd_req_b <= '1';
-		wait until tb_rd_ready_b = '1';
-		-- deglitch
-		wait for 5ns;
-		if tb_rd_ready_b /= '1' then
-			wait until tb_rd_ready_b = '1';
-	   end if;
-		wait until tb_clk = '0';
-		wait until tb_clk = '1';
-		tb_read_data_b <= tb_rd_data_b;
-		tb_rd_req_b <= '0';
-		tb_wr_req_b <= '1';
-		wait until tb_clk = '0';
-		wait until tb_clk = '1';
-		tb_wr_data_b <= std_logic_vector(unsigned(tb_read_data_b) + 1);
-		wait until tb_wr_ready_b = '1';
-		wait until tb_clk = '0';
-		wait until tb_clk = '1';
-	end loop;
-	
-	tb_wr_req_b <= '0';
-	
-	tb_test_b_done <= '1';
-	
+    wait until tb_test_b = '1';
+
+    tb_test_b_done <= '0';
+
+    -- perform test of a port independently from b
+    tb_wr_req_b   <= '0';
+    tb_rd_req_b   <= '0';
+    tb_data_sel_b <= '0';
+
+    for i in 0 to 2**(ADDRESS_WIDTH-1) - 1 loop
+      cacheline    := i / 8;
+      byte         := i mod 8;
+      wait until tb_clk = '1';
+      tb_address_b <= to_unsigned((cacheline*2 + 1)*8 + byte, ADDRESS_WIDTH);
+      tb_wr_req_b  <= '0';
+      tb_rd_req_b  <= '1';
+      wait until tb_rd_ready_b = '1';
+      -- deglitch
+      wait for 5ns;
+      if tb_rd_ready_b /= '1' then
+        wait until tb_rd_ready_b = '1';
+      end if;
+      wait until tb_clk = '0';
+      wait until tb_clk = '1';
+      tb_read_data_b <= tb_rd_data_b;
+      tb_rd_req_b    <= '0';
+      tb_wr_req_b    <= '1';
+      wait until tb_clk = '0';
+      wait until tb_clk = '1';
+      tb_wr_data_b   <= std_logic_vector(unsigned(tb_read_data_b) + 1);
+      wait until tb_wr_ready_b = '1';
+      wait until tb_clk = '0';
+      wait until tb_clk = '1';
+    end loop;
+
+    tb_wr_req_b <= '0';
+
+    tb_test_b_done <= '1';
+
   end process;
 
   process

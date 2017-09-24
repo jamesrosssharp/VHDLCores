@@ -171,6 +171,15 @@ ALU  FP fcmp              | 0  1  0  0  1  0  1  1  0  0  0  0  u  u  v  v
 ALU  FP fint              | 0  1  1  0  1  0  1  1  0  0  0  0  u  u  0  0  | convert register from IEEE floating point representation to integer
 ALU  FP fflt              | 0  1  0  1  1  0  1  1  0  0  0  0  u  u  0  0  | convert from integer to IEEE floating point representation
 
+ALU  C nop                | 0  1  0  0  0  1  1  1  0  0  0  0  0  0  0  0  |  nop
+ALU  C sleep              | 0  1  0  0  1  1  1  1  0  0  0  0  0  0  0  0  |  sleep, wake on interrupt
+ALU  C ?                  | 0  1  0  1  0  1  1  1  0  0  0  0  0  0  0  0  |  ?
+ALU  C ?                  | 0  1  0  1  1  1  1  1  0  0  0  0  0  0  0  0  |  ?
+ALU  C ?                  | 0  1  1  0  0  1  1  1  0  0  0  0  0  0  0  0  |  ?
+ALU  C ?                  | 0  1  1  0  1  1  1  1  0  0  0  0  0  0  0  0  |  ?
+ALU  C ?                  | 0  1  1  1  0  1  1  1  0  0  0  0  0  0  0  0  |  ?
+ALU  C ?                  | 0  1  1  1  1  1  1  1  0  0  0  0  0  0  0  0  |  ?
+
 FC   NA jump              | 1  0  0  0  0  1  0  c  c  c  c  c  c  c  c  c  | jump to absolute address, contains 9 bit immediate which
                                                                             can be extended to 24 bits (bit 0 is don't care)
                                                                             using the imm instruction
