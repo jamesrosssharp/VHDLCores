@@ -59,8 +59,8 @@ entity EightPortMemoryController is
     n_wr_3       : in  std_logic;
 
     address_4    : in  unsigned (ADDRESS_WIDTH - 1 downto 0);
-    wr_data_4    : in  std_logic_vector (2**WORD_WIDTH_BITS - 1 downto 0);
-    rd_data_4    : out std_logic_vector (2**WORD_WIDTH_BITS - 1 downto 0);
+    wr_data_4    : in  std_logic_vector (WORD_WIDTH - 1 downto 0);
+    rd_data_4    : out std_logic_vector (WORD_WIDTH - 1 downto 0);
     burst_size_4 : in  std_logic_vector(BURST_SIZE_BITS - 1 downto 0);
     wr_req_4     : in  std_logic;
     rd_req_4     : in  std_logic;
@@ -154,7 +154,7 @@ entity EightPortMemoryController is
     ds_rd_grant_3   : in  std_logic;
     ds_wr_done_3    : in  std_logic;
     ds_n_rd_3       : out std_logic;
-    ds_n_wr_3       : out std_logic;
+    ds_n_wr_3       : out std_logic
 
     );
 end EightPortMemoryController;
@@ -173,13 +173,13 @@ architecture RTL of EightPortMemoryController is
   signal state, next_state : state_t := idle;
   
   signal sel_address : unsigned(ADDRESS_WIDTH - 1 downto 0);
-  signal sel_rd_data : std_logic_vector(2**WORD_WIDTH - 1 downto 0);
+  signal sel_rd_data : std_logic_vector(WORD_WIDTH - 1 downto 0);
 
   signal sel_wr_grant : std_logic;
   signal sel_rd_grant : std_logic;
   signal sel_wr_done  : std_logic;
 
-  signal sel_wr_data    : std_logic_vector (2**WORD_WIDTH - 1 downto 0);
+  signal sel_wr_data    : std_logic_vector (WORD_WIDTH - 1 downto 0);
   signal sel_burst_size : std_logic_vector (BURST_SIZE_BITS - 1 downto 0);
   signal sel_wr_req     : std_logic;
   signal sel_rd_req     : std_logic;
@@ -192,9 +192,21 @@ begin
   -- multiplex downstream ports
 
   process (sel_address,
-           ds_rd_data_1, ds_wr_grant_1, ds_rd_grant_1, ds_wr_done_1,
-           ds_rd_data_2, ds_wr_grant_2, ds_rd_grant_2, ds_wr_done_2,
-           ds_rd_data_3, ds_wr_grant_3, ds_rd_grant_3, ds_wr_done_3
+           ds_rd_data_1, ds_wr_grant_1,  ds_rd_grant_1, ds_wr_done_1,
+           ds_rd_data_2, ds_wr_grant_2,  ds_rd_grant_2, ds_wr_done_2,
+           ds_rd_data_3, ds_wr_grant_3,  ds_rd_grant_3, ds_wr_done_3,
+			  sel_wr_data,  sel_burst_size, sel_wr_req, 	  sel_rd_req, 
+			  sel_wr_grant, sel_rd_grant,   sel_wr_done,   wr_data_1,
+			  burst_size_1, n_rd_1, n_wr_1, address_1,     sel_rd_data,
+			  wr_data_2, burst_size_2, n_rd_2, n_wr_2, address_2,
+			  wr_data_3, burst_size_3, n_rd_3, n_wr_3, address_3,
+			  wr_data_4, burst_size_4, n_rd_4, n_wr_4, address_4,
+			  wr_data_5, burst_size_5, n_rd_5, n_wr_5, address_5,
+			  wr_data_6, burst_size_6, n_rd_6, n_wr_6, address_6,
+			  wr_data_7, burst_size_7, n_rd_7, n_wr_7, address_7,
+			  wr_data_8, burst_size_8, n_rd_8, n_wr_8, address_8,
+			  sel_n_rd, sel_n_wr
+			  
            )
   begin
 
@@ -288,7 +300,7 @@ begin
   begin
     if reset = '1' then
       state <= idle;
-    elsif rising_edge(clk)
+    elsif rising_edge(clk) then
       state <= next_state;
     end if;
   end process;
@@ -299,7 +311,24 @@ begin
            rd_req_3, wr_req_3, rd_req_4, wr_req_4,
            rd_req_5, wr_req_5, rd_req_6, wr_req_6,
            rd_req_7, wr_req_7, rd_req_8, wr_req_8,
-           state)
+           state, sel_rd_data, sel_wr_grant, sel_wr_done,
+			  wr_data_1, sel_rd_grant, burst_size_1, n_rd_1,
+			  n_wr_1, address_1, 
+			  wr_data_2, burst_size_2, n_rd_2, n_wr_2,
+			  address_2,
+			  wr_data_3, burst_size_3, n_rd_3, n_wr_3,
+			  address_3,
+			  wr_data_4, burst_size_4, n_rd_4, n_wr_4,
+			  address_4,
+			  wr_data_5, burst_size_5, n_rd_5, n_wr_5,
+			  address_5,
+			  wr_data_6, burst_size_6, n_rd_6, n_wr_6,
+			  address_6,
+			  wr_data_7, burst_size_7, n_rd_7, n_wr_7,
+			  address_7,
+			  wr_data_8, burst_size_8, n_rd_8, n_wr_8,
+			  address_8
+			  )
   begin
 
     rd_data_1    <= (others => '0');
@@ -357,31 +386,35 @@ begin
       when idle =>
         if rd_req_1 = '1' then
           next_state <= read_port_1;
-        elsif wr_reg_1 = '1' then
+        elsif wr_req_1 = '1' then
           next_state <= write_port_1;
         elsif rd_req_2 = '1' then
           next_state <= read_port_2;
-        elsif wr_reg_2 = '1' then
+        elsif wr_req_2 = '1' then
           next_state <= write_port_2;
         elsif rd_req_3 = '1' then
           next_state <= read_port_3;
-        elsif wr_reg_3 = '1' then
+        elsif wr_req_3 = '1' then
           next_state <= write_port_3;
         elsif rd_req_4 = '1' then
           next_state <= read_port_4;
-        elsif wr_reg_4 = '1' then
+        elsif wr_req_4 = '1' then
           next_state <= write_port_4;
         elsif rd_req_5 = '1' then
           next_state <= read_port_5;
-        elsif wr_reg_5 = '1' then
+        elsif wr_req_5 = '1' then
           next_state <= write_port_5;
         elsif rd_req_6 = '1' then
           next_state <= read_port_6;
-        elsif wr_reg_7 = '1' then
+        elsif wr_req_6 = '1' then
+          next_state <= write_port_6;
+        elsif rd_req_7 = '1' then
+          next_state <= read_port_7;
+        elsif wr_req_7 = '1' then
           next_state <= write_port_7;
-        elsif rd_req_8 = '1' then
+		  elsif rd_req_8 = '1' then
           next_state <= read_port_8;
-        elsif wr_reg_8 = '1' then
+        elsif wr_req_8 = '1' then
           next_state <= write_port_8;
         end if;
       when read_port_1 =>
@@ -624,6 +657,7 @@ begin
          if wr_req_8 = '0' then
            next_state <= idle;
          end if; 
+		end case;
   end process;
 
 end RTL;

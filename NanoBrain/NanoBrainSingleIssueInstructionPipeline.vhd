@@ -363,7 +363,13 @@ begin
   -- this process isn't in the instruction decoded because register access is needed.
   process (decoded_x_sel, decoded_y_sel, decoded_z_sel,
            decoded_u_sel, decoded_v_sel, decoded_c_sel,
-           stage_2_instruction, stage_2_pc)
+           stage_2_instruction, stage_2_pc, reg16_bank,
+			  reg32_bank, imm_reg, branch_target, stage_1_halt,
+			  stage_1_icache_portsel, stage_1_pc, icache_rd_ready_b,
+			  stage_2_stall, stage_2_halt, decoded_ipu_op, decoded_op,
+			  decoded_operand_x, decoded_operand_y, decoded_operand_z,
+			  decoded_operand_fx, decoded_operand_fy, decoded_reg16_dest_lo,
+			  decoded_reg16_dest_hi, decoded_jump_target)
     variable i             : instruction_t;
     variable idx           : std_logic_vector(3 downto 0);
     variable jump_target   : std_logic_vector(22 downto 0);
@@ -377,7 +383,7 @@ begin
       when "10" =>
         decoded_operand_x <= reg16_bank(to_integer(unsigned(i(6 downto 4) & '0')));
       when others =>
-        decoded_operand_y <= (others => '0');
+        decoded_operand_x <= (others => '0');
     end case;
 
     case decoded_y_sel is
@@ -393,6 +399,7 @@ begin
       when '1' =>
         decoded_operand_z <= reg16_bank(to_integer(unsigned(i(3 downto 0) & '1')));
       when others =>
+			decoded_operand_z <= (others => '0');
     end case;
 
     case decoded_u_sel is
@@ -400,6 +407,7 @@ begin
         idx                := "11" & i(3 downto 2);
         decoded_operand_fx <= reg32_bank(to_integer(unsigned(idx)));
       when others =>
+		  decoded_operand_fx <= (others => '0');
     end case;
 
     case decoded_v_sel is
@@ -407,6 +415,7 @@ begin
         idx                := "11" & i(1 downto 0);
         decoded_operand_fy <= reg32_bank(to_integer(unsigned(idx)));
       when others =>
+		  decoded_operand_fy <= (others => '0');
     end case;
 
     case decoded_c_sel is
@@ -440,10 +449,27 @@ begin
 
 
   -- main state machine
+  
+  stage_0_halt <= stage_1_stall or stage_1_halt;
+  stage_1_halt <= stage_2_stall or stage_2_halt;
+  stage_2_halt <= stage_3_stall or stage_3_halt;
+  stage_3_halt <= stage_4_stall or stage_4_halt;
+  stage_4_halt <= stage_5_stall or stage_5_halt;
+  stage_5_halt <= stage_6_stall;
+  
 
-  process (pc, flush_pipeline, stage_0_halt, stage_0_icache_portsel)
+  process (pc, flush_pipeline, stage_0_halt, stage_0_icache_portsel,
+				branch_target, stage_1_halt, stage_1_icache_portsel, stage_1_pc,
+				icache_rd_ready_a, icache_rd_data_a, icache_rd_ready_b, 
+				icache_rd_data_b, stage_2_stall, stage_2_halt, decoded_ipu_op,
+				decoded_bs_op, decoded_op, decoded_fc_op, decoded_io_op,
+				decoded_operand_x, decoded_operand_y, decoded_operand_fx,
+				decoded_operand_fy, decoded_reg16_dest_lo, decoded_reg16_dest_hi,
+				decoded_jump_target, decoded_fpu_op, decoded_operand_z)
   begin
 
+	flush_pipeline_next <= '0';
+  
     -- pc next
 
     if flush_pipeline = '1' then
@@ -485,7 +511,7 @@ begin
     if stage_1_halt = '1' then
       stage_1_icache_portsel_next <= stage_1_icache_portsel;
     else
-      stage_1_icache_portsel_next <= not stage_0_icache_portsel;
+      stage_1_icache_portsel_next <= stage_0_icache_portsel;
     end if;
 
     if flush_pipeline = '1' then
