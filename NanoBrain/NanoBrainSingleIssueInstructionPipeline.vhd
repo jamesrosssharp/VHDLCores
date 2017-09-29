@@ -188,7 +188,7 @@ architecture RTL of NanoBrainSingleIssueInstructionPipeline is
   signal stage_1_pc, stage_1_pc_next                         : address_t;
   signal stage_1_halt                                        : std_logic;
   signal stage_1_stall                                       : std_logic;
-  signal stage_1_icache_portsel, stage_1_icache_portsel_next : std_logic;
+  signal stage_1_icache_portsel									    : std_logic;
 
   -- pipeline stage 2 (decode) signals
 
@@ -240,11 +240,6 @@ architecture RTL of NanoBrainSingleIssueInstructionPipeline is
 
   signal stage_5_halt  : std_logic;
   signal stage_5_stall : std_logic;
-
-  -- pipeline stage 6 (write back) signals
-
-  signal stage_6_halt  : std_logic;
-  signal stage_6_stall : std_logic;
 
   -- registers
 
@@ -303,8 +298,7 @@ begin
       imm_reg <= (others => '0');
 
       stage_0_icache_portsel <= '0';
-      stage_1_icache_portsel <= '0';
-		
+      
 		stage_1_pc <= (others => '0');
 		stage_2_pc <= (others => '0');
 
@@ -331,8 +325,7 @@ begin
       end if;
 
       stage_0_icache_portsel <= stage_0_icache_portsel_next;
-      stage_1_icache_portsel <= stage_1_icache_portsel_next;
-		
+    	
 		stage_1_pc <= stage_1_pc_next;
 		stage_2_pc <= stage_2_pc_next;
 
@@ -455,11 +448,11 @@ begin
   stage_2_halt <= stage_3_stall or stage_3_halt;
   stage_3_halt <= stage_4_stall or stage_4_halt;
   stage_4_halt <= stage_5_stall or stage_5_halt;
-  stage_5_halt <= stage_6_stall;
   
-
+  stage_1_icache_portsel <= not stage_0_icache_portsel;
+  
   process (pc, flush_pipeline, stage_0_halt, stage_0_icache_portsel,
-				branch_target, stage_1_halt, stage_1_icache_portsel, stage_1_pc,
+				branch_target, stage_1_halt, stage_1_pc,
 				icache_rd_ready_a, icache_rd_data_a, icache_rd_ready_b, 
 				icache_rd_data_b, stage_2_stall, stage_2_halt, decoded_ipu_op,
 				decoded_bs_op, decoded_op, decoded_fc_op, decoded_io_op,
@@ -469,6 +462,12 @@ begin
   begin
 
 	flush_pipeline_next <= '0';
+	stage_1_stall <= '0';
+	stage_2_stall <= '0';
+	stage_3_stall <= '0';
+	stage_4_stall <= '0';
+	stage_5_stall <= '0';
+	
   
     -- pc next
 
@@ -508,12 +507,7 @@ begin
 
     stage_1_stall <= '0';
 
-    if stage_1_halt = '1' then
-      stage_1_icache_portsel_next <= stage_1_icache_portsel;
-    else
-      stage_1_icache_portsel_next <= stage_0_icache_portsel;
-    end if;
-
+    
     if flush_pipeline = '1' then
       stage_2_instruction_next <= NOP_INSTRUCTION;
       stage_2_pc_next          <= (others => '0');

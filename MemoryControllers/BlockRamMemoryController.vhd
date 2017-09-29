@@ -49,7 +49,7 @@ architecture RTL of BlockRamMemoryController is
   signal sig_br_address, sig_br_address_next : natural range 0 to 2**BR_ADDRESS_WIDTH - 1;
 
   signal burst_idx, burst_idx_next : natural range 0 to 2**BURST_SIZE_BITS - 1;
-  
+   
 begin
 
   br_address <= sig_br_address;
@@ -60,7 +60,7 @@ begin
       state          <= idle;
       sig_br_address <= 0;
       burst_idx <= 0;
-    elsif rising_edge(clk) then
+	 elsif rising_edge(clk) then
       state          <= next_state;
       sig_br_address <= sig_br_address_next;
       burst_idx <= burst_idx_next;
@@ -77,7 +77,7 @@ begin
     next_state          <= state;
     sig_br_address_next <= sig_br_address;
     burst_idx_next <= burst_idx;
-    
+	 
     rd_grant <= '0';
     wr_grant <= '0';
     br_wr <= '0';
@@ -88,17 +88,16 @@ begin
         if rd_req = '1' then
           sig_br_address_next <= to_integer(address(BR_ADDRESS_WIDTH - 1 downto 0));
           next_state          <= read_data;
-        elsif wr_req = '1' then
+		  elsif wr_req = '1' then
           sig_br_address_next <= to_integer(address(BR_ADDRESS_WIDTH - 1 downto 0));
           next_state          <= write_data;
         end if;
       when read_data =>
-        rd_grant <= '1';
-        if n_rd = '0' then
+		  rd_grant <= '1';
+		  if n_rd = '0' then
           sig_br_address_next <= sig_br_address + 1;
-        end if;
-
-        if rd_req = '0' then
+		  end if;
+		  if rd_req = '0' then
           next_state <= idle;
         end if;
       when write_data =>

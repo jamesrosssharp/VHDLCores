@@ -167,8 +167,10 @@ architecture RTL of DualPortBlockRamCache is
   type state_t is (idle, resetCache,
                    flushOutCacheLine_a1, flushOutCacheLine_a2,
                    flushOutCacheLine_b1, flushOutCacheLine_b2,
-                   readCacheLine_a1, readCacheLine_a2, readCacheLine_a3,
-                   readCacheLine_b1, readCacheLine_b2, readCacheLine_b3,
+                   readCacheLine_a1, readCacheLine_a2, readCacheLine_a2_wait,
+						 readCacheLine_a3,
+                   readCacheLine_b1, readCacheLine_b2, readCacheLine_b2_wait,
+						 readCacheLine_b3,
                    invalidate0, invalidate1, invalidate2, invalidate3,
                    invalidate4);
   signal state, next_state : state_t := idle;
@@ -595,8 +597,14 @@ begin
         address_ds(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT)
           <= latch_address_a(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT);
         if (rd_grant_ds = '1') then
-          next_state <= readCacheLine_a2;
+          next_state <= readCacheLine_a2_wait;
         end if;
+		when readCacheLine_a2_wait =>
+			rd_req_ds <= '1';
+			n_rd_ds <= '0';
+			 address_ds(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT)
+          <= latch_address_a(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT);
+			next_state <= readCacheLine_a2;
       when readCacheLine_a2 =>
         rd_req_ds            <= '1';
         cache_read_word_next <= cache_read_word + 1;
@@ -647,9 +655,15 @@ begin
         address_ds(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT)
           <= latch_address_b(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT);
         if (rd_grant_ds = '1') then
-          next_state <= readCacheLine_b2;
+          next_state <= readCacheLine_b2_wait;
         end if;
-      when readCacheLine_b2 =>
+	when readCacheLine_b2_wait =>
+			rd_req_ds <= '1';
+			n_rd_ds <= '0';
+			address_ds(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT)
+          <= latch_address_a(ADDRESS_LAST_TAG_BIT downto ADDRESS_FIRST_CACHE_LINE_SEL_BIT);
+			next_state <= readCacheLine_b2;
+	 when readCacheLine_b2 =>
         rd_req_ds            <= '1';
         cache_read_word_next <= cache_read_word + 1;
         n_rd_ds              <= '0';
