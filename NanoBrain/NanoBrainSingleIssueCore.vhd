@@ -57,6 +57,13 @@ entity NanoBrainSingleIssueCore is
     d_n_rd       : out std_logic;
     d_n_wr       : out std_logic;
 
+    -- port bus
+    port_address : out std_logic_vector(15 downto 0);
+    port_wr_data : out std_logic_vector(15 downto 0);
+    port_rd_data : in  std_logic_vector(15 downto 0);
+    port_n_rd    : out std_logic;
+    port_n_wr    : out std_logic;
+
     -- interrupt line
     interrupt : in std_logic
     );
@@ -69,83 +76,90 @@ architecture RTL of NanoBrainSingleIssueCore is
       clk   : in std_logic;
       reset : in std_logic;
 
-    icache_wr_data_a       : out  std_logic_vector (15 downto 0);
-    icache_rd_data_a       : in std_logic_vector (15 downto 0);
-    icache_data_sel_a      : out  std_logic;
-    icache_rd_req_a        : out  std_logic;
-    icache_wr_req_a        : out  std_logic;
-    icache_flush_req       : out  std_logic;
-    icache_invalidate_req  : out  std_logic;
-    icache_wr_data_b       : out  std_logic_vector (15 downto 0);
-    icache_rd_data_b       : in std_logic_vector (15 downto 0);
-    icache_data_sel_b      : out  std_logic;
-    icache_rd_req_b        : out  std_logic;
-    icache_wr_req_b        : out  std_logic;
-    icache_bypass          : out  std_logic;
-    icache_rd_ready_a      : in std_logic;
-    icache_wr_ready_a      : in std_logic;
-    icache_rd_ready_b      : in std_logic;
-    icache_wr_ready_b      : in std_logic;
-    icache_flush_done      : in std_logic;
-    icache_invalidate_done : in std_logic;
-    icache_address_a       : out  unsigned (23 downto 0);
-    icache_address_b       : out  unsigned (23 downto 0);
+      icache_wr_data_a       : out std_logic_vector (15 downto 0);
+      icache_rd_data_a       : in  std_logic_vector (15 downto 0);
+      icache_data_sel_a      : out std_logic;
+      icache_rd_req_a        : out std_logic;
+      icache_wr_req_a        : out std_logic;
+      icache_flush_req       : out std_logic;
+      icache_invalidate_req  : out std_logic;
+      icache_wr_data_b       : out std_logic_vector (15 downto 0);
+      icache_rd_data_b       : in  std_logic_vector (15 downto 0);
+      icache_data_sel_b      : out std_logic;
+      icache_rd_req_b        : out std_logic;
+      icache_wr_req_b        : out std_logic;
+      icache_bypass          : out std_logic;
+      icache_rd_ready_a      : in  std_logic;
+      icache_wr_ready_a      : in  std_logic;
+      icache_rd_ready_b      : in  std_logic;
+      icache_wr_ready_b      : in  std_logic;
+      icache_flush_done      : in  std_logic;
+      icache_invalidate_done : in  std_logic;
+      icache_address_a       : out unsigned (23 downto 0);
+      icache_address_b       : out unsigned (23 downto 0);
 
-    -- dcache
+      -- dcache
 
-    dcache_wr_data_a       : out  std_logic_vector (15 downto 0);
-    dcache_rd_data_a       : in std_logic_vector (15 downto 0);
-    dcache_data_sel_a      : out  std_logic;
-    dcache_rd_req_a        : out std_logic;
-    dcache_wr_req_a        : out  std_logic;
-    dcache_flush_req       : out  std_logic;
-    dcache_invalidate_req  : out  std_logic;
-    dcache_wr_data_b       : out  std_logic_vector (15 downto 0);
-    dcache_rd_data_b       : in std_logic_vector (15 downto 0);
-    dcache_data_sel_b      : out  std_logic;
-    dcache_rd_req_b        : out  std_logic;
-    dcache_wr_req_b        : out  std_logic;
-    dcache_bypass          : out  std_logic;
-    dcache_rd_ready_a      : in std_logic;
-    dcache_wr_ready_a      : in std_logic;
-    dcache_rd_ready_b      : in std_logic;
-    dcache_wr_ready_b      : in std_logic;
-    dcache_flush_done      : in std_logic;
-    dcache_invalidate_done : in std_logic;
-    dcache_address_a       : out unsigned (23 downto 0);
-    dcache_address_b       : out unsigned (23 downto 0);
+      dcache_wr_data_a       : out std_logic_vector (15 downto 0);
+      dcache_rd_data_a       : in  std_logic_vector (15 downto 0);
+      dcache_data_sel_a      : out std_logic;
+      dcache_rd_req_a        : out std_logic;
+      dcache_wr_req_a        : out std_logic;
+      dcache_flush_req       : out std_logic;
+      dcache_invalidate_req  : out std_logic;
+      dcache_wr_data_b       : out std_logic_vector (15 downto 0);
+      dcache_rd_data_b       : in  std_logic_vector (15 downto 0);
+      dcache_data_sel_b      : out std_logic;
+      dcache_rd_req_b        : out std_logic;
+      dcache_wr_req_b        : out std_logic;
+      dcache_bypass          : out std_logic;
+      dcache_rd_ready_a      : in  std_logic;
+      dcache_wr_ready_a      : in  std_logic;
+      dcache_rd_ready_b      : in  std_logic;
+      dcache_wr_ready_b      : in  std_logic;
+      dcache_flush_done      : in  std_logic;
+      dcache_invalidate_done : in  std_logic;
+      dcache_address_a       : out unsigned (23 downto 0);
+      dcache_address_b       : out unsigned (23 downto 0);
 
-    -- connection to IPU
-    ipu_operand_x : out std_logic_vector(15 downto 0);
-    ipu_operand_y : out std_logic_vector(15 downto 0);
-    ipu_operand_z : out std_logic_vector(15 downto 0);
-    ipu_result_lo : in  std_logic_vector(15 downto 0);
-    ipu_result_hi : in  std_logic_vector(15 downto 0);
-    ipu_C_in      : out std_logic;
-    ipu_C_out     : in  std_logic;
-	 ipu_Z_in      : out std_logic;
-    ipu_Z_out     : in  std_logic;
-    ipu_busy      : in  std_logic;
-    ipu_op        : out IPU_Op;
+      -- connection to IPU
+      ipu_operand_x : out std_logic_vector(15 downto 0);
+      ipu_operand_y : out std_logic_vector(15 downto 0);
+      ipu_operand_z : out std_logic_vector(15 downto 0);
+      ipu_result_lo : in  std_logic_vector(15 downto 0);
+      ipu_result_hi : in  std_logic_vector(15 downto 0);
+      ipu_C_in      : out std_logic;
+      ipu_C_out     : in  std_logic;
+      ipu_Z_in      : out std_logic;
+      ipu_Z_out     : in  std_logic;
+      ipu_busy      : in  std_logic;
+      ipu_op        : out IPU_Op;
 
-    -- connection to FPU
-    fpu_operand_x : out std_logic_vector(31 downto 0);
-    fpu_operand_y : out std_logic_vector(31 downto 0);
-    fpu_result    : in  std_logic_vector(31 downto 0);
-    fpu_C_out     : in  std_logic;
-    fpu_Z_out     : in  std_logic;
-    -- when '1', FPU is busy with an operation. Pipeline must stall until it
-    -- completes.
-    fpu_busy      : in  std_logic;
-    fpu_op        : out FPU_Op;
+      -- connection to FPU
+      fpu_operand_x : out std_logic_vector(31 downto 0);
+      fpu_operand_y : out std_logic_vector(31 downto 0);
+      fpu_result    : in  std_logic_vector(31 downto 0);
+      fpu_C_out     : in  std_logic;
+      fpu_Z_out     : in  std_logic;
+      -- when '1', FPU is busy with an operation. Pipeline must stall until it
+      -- completes.
+      fpu_busy      : in  std_logic;
+      fpu_op        : out FPU_Op;
 
-    -- connection to BS
-    bs_operand_x : out std_logic_vector(15 downto 0);
-    bs_shift     : out std_logic_vector(3 downto 0);
-    bs_result    : in  std_logic_vector(15 downto 0);
-    bs_C_in      : out std_logic;
-    bs_C_out     : in  std_logic;
-    bs_op        : out BS_Op
+      -- connection to BS
+      bs_operand_x : out std_logic_vector(15 downto 0);
+      bs_shift     : out std_logic_vector(3 downto 0);
+      bs_result    : in  std_logic_vector(15 downto 0);
+      bs_C_in      : out std_logic;
+      bs_C_out     : in  std_logic;
+      bs_op        : out BS_Op;
+
+      -- connection to port bus
+      port_address : out std_logic_vector(15 downto 0);
+      port_wr_data : out std_logic_vector(15 downto 0);
+      port_rd_data : in  std_logic_vector(15 downto 0);
+      port_n_rd    : out std_logic;
+      port_n_wr    : out std_logic
       );
   end component;
 
@@ -170,7 +184,7 @@ architecture RTL of NanoBrainSingleIssueCore is
       -- carry out
       C_out     : out std_logic;
       -- Zero in
-      Z_in      : in std_logic;
+      Z_in      : in  std_logic;
       -- zero out
       Z_out     : out std_logic;
       -- we will stall the pipeline eg. on a division instruction while it completes.
@@ -347,7 +361,12 @@ begin
       bs_result              => bs_result,
       bs_C_in                => bs_C_in,
       bs_C_out               => bs_C_out,
-      bs_op                  => bs_op
+      bs_op                  => bs_op,
+      port_address           => port_address,
+      port_wr_data           => port_wr_data,
+      port_rd_data           => port_rd_data,
+      port_n_rd              => port_n_rd,
+      port_n_wr              => port_n_wr
       );
 
   ipu0 : NanoBrainIntegerProcessingUnit

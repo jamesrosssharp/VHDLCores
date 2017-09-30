@@ -112,7 +112,6 @@ MMU
 Op codes
 --------
 
-90 Instructions
 
 C = class (IMM = immediate, ALU = alu, FC = flow control, IO = memory access / special purpose registers)
 U = unit (C = CPU main, IP = integer pipeline, BS = barrel shifter, FP = floating point unit)
@@ -210,42 +209,12 @@ FC   NA reti              | 1  0  1  1  1  1  1  0  0  0  0  0  0  0  0  1  | re
                                                                            and enable interrupts
 FC   NA rete              | 1  0  1  1  1  1  1  0  0  0  0  0  0  0  1  0  | return from exception
 
-IO   NA ldw r0/r1, ccc    | 1  1  0  0  0  0  x  c  c  c  c  c  c  c  c  c  |  load register x (r0 or r1) from [kkkkk]
-                                                                           (can extend to 24 bits using imm instruction)
-IO   NA ldw rx, [IDy + 2b]| 1  1  0  0  0  1  x  x  x  x  y  y  b  b  b  b  |  load register x from address pointed to by
-                                                                             [IDy + bbb * 2], k unsigned.
-IO   NA ldspr rx:rx+1,SPRy| 1  1  0  0  1  0  x  x  x  0  0  0  y  y  y  y  |  load registers from special purpose register. That is xxx adresses
-                                                                             two registers, i.e.
-                                                                             x = 0, r0:r1, x = 1, r2:r3 which are loaded from SPR yyyy.
-                                                                             In the case of the floating point registers, the raw contents
-                                                                             (IEEE floating point representation) is transferred.
-IO   NA incpr  IDy        | 1  1  0  0  1  0  0  0  0  0  1  0  0  0  y  y  |  increment index register (note this adds 1, so unaligned access may
-                                                                             occur)
-IO   NA wincpr IDy        | 1  1  0  0  1  0  0  0  0  1  1  0  0  0  y  y  |  word increment, i.e. IDy = IDy + 2                         
-IO   NA decpr  IDy        | 1  1  0  0  1  0  0  0  0  0  1  1  0  0  y  y  |  decrement index register
-IO   NA wdecpr IDy        | 1  1  0  0  1  0  0  0  0  1  1  1  0  0  y  y  |  word decrement index register
+IO   NA ldw rx, [spr_i+b] | 1  1  0  0  0  0  i  i  x  x  x  x  b  b  b  b  |  load register rx from [spr_i + b]
+IO   NA stw rx, [spr_i+b] | 1  1  0  0  0  1  i  i  x  x  x  x  b  b  b  b  |  store register rx to [spr_i + b]
 
-IO   NA ldpid             | 1  1  0  0  1  1  0  0  x  x  x  x  0  0  0  0  |  load first 6 bits of rx into pid register
+-- space here for 13 more instructions
 
-IO   NA ldtlb             | 1  1  0  0  1  1  1  0  x  x  x  d  d  d  d  d  |  load tlb entry dddd from registers: x = 0, r0:r1, x = 1, r2:r3 etc.
+IO  NA  out rx, py        | 1  1  1  1  1  1  0  0  x  x  x  x  y  y  y  y  |  output the contents of rx to port py.
+IO  NA  in  rx, py        | 1  1  1  1  1  1  0  1  x  x  x  x  y  y  y  y  |  input from port py and store in rx.
 
-IO   NA mbar		  | 1  1  0  0  1  1  1  1  0  0  0  0  b  b  b  b  |  memory barrier ?
-
-
-IO   NA stw r0/r1, ccc    | 1  1  0  1  0  0  x  c  c  c  c  c  c  c  c  c  |  store register x (r0 or r1) to [kkkk] 
-IO   NA stw rx, [IDy + 2b]| 1  1  0  1  0  1  x  x  x  x  y  y  b  b  b  b  |  store register x to address pointed to by [IDy + kkk * 2]
-IO   NA stspr rx:rx+1,SPRy| 1  1  0  1  1  0  x  x  x  0  0  0  y  y  y  y  |  store registers to special purpose register. That is xxx adresses
-                                                                             two registers, i.e.
-                                                                             x = 0, r0:r1, x = 1, r2:r3 which are loaded from SPR yyyy.
-                                                                             In the case of the floating point registers, the raw contents
-                                                                             (IEEE floating point representation) is transferred.
-IO   NA cmpxchg		  | 1  1  0  1  1  1  x  x  x  x  y  y  y  y  z  z  | compare rx with [IDz]. IDz must be word aligned, or else an 
-								              unaligned access exception will occur. If rx = [IDz], zero flag
-									      is set and ry is stored at [IDz]. Else zero flag is cleared and
-									      value of [IDz] is stored into rx.
-
-IO  NA  ldb r0/r1,[eee]   | 1  1  1  0  0  x  e  e  e  e  e  e  e  e  e  e  |  load byte at eee (extendable to 24 bits) into x (r0 or r1) low byte   
-IO  NA  ldb rx,[IDy + b]  | 1  1  1  0  1  0  x  x  x  x  y  y  b  b  b  b  |  load byte at (IDy + b) into xxx
-IO  NA  stb r0/r1,[eee]   | 1  1  1  1  0  x  e  e  e  e  e  e  e  e  e  e  |  store byte in rx to eee (extendable to 24 bits)    
-IO  NA  stb rx,[IDy + b]  | 1  1  1  1  1  0  x  x  x  x  y  y  b  b  b  b  |  store byte in rx to (IDy + b) into xxx
 

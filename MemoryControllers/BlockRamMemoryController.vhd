@@ -46,19 +46,19 @@ architecture RTL of BlockRamMemoryController is
   type state_t is (idle, read_data, write_data);
 
   signal state, next_state                   : state_t := idle;
-  signal sig_br_address, sig_br_address_next : natural range 0 to 2**BR_ADDRESS_WIDTH - 1;
-
+  signal sig_br_address, sig_br_address_next : unsigned (BR_ADDRESS_WIDTH - 1 downto 0);
+ 
   signal burst_idx, burst_idx_next : natural range 0 to 2**BURST_SIZE_BITS - 1;
    
 begin
 
-  br_address <= sig_br_address;
+  br_address <= to_integer(sig_br_address);
 
   process (clk, reset)
   begin
     if reset = '1' then
       state          <= idle;
-      sig_br_address <= 0;
+      sig_br_address <= (others => '0');
       burst_idx <= 0;
 	 elsif rising_edge(clk) then
       state          <= next_state;
@@ -86,10 +86,10 @@ begin
     case state is
       when idle =>
         if rd_req = '1' then
-          sig_br_address_next <= to_integer(address(BR_ADDRESS_WIDTH - 1 downto 0));
+          sig_br_address_next <= address(BR_ADDRESS_WIDTH - 1 downto 0);
           next_state          <= read_data;
 		  elsif wr_req = '1' then
-          sig_br_address_next <= to_integer(address(BR_ADDRESS_WIDTH - 1 downto 0));
+          sig_br_address_next <= address(BR_ADDRESS_WIDTH - 1 downto 0);
           next_state          <= write_data;
         end if;
       when read_data =>

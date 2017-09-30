@@ -26,7 +26,7 @@ package NanoBrainInternal is
                  FC_RET, FC_RETI, FC_RETE, FC_SVC, FC_NOP);
 					  
   -- TODO: fix this
-  type IO_Op is ( IO_NOP );
+  type IO_Op is ( IO_NOP, IO_IN, IO_OUT );
   
   subtype instruction_t is std_logic_vector(15 downto 0);
   subtype reg16_t is std_logic_vector(15 downto 0);

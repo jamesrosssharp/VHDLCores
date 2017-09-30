@@ -31,7 +31,13 @@ entity NanoBrainInstructionDecoder is
     decoded_bs_op        : out BS_Op;
     decoded_fpu_op       : out FPU_Op;
     decoded_fc_op        : out FC_Op;
-    decoded_io_op        : out IO_Op
+    decoded_io_op        : out IO_Op;
+
+    decoded_reg16_lo    : out std_logic_vector(3 downto 0);
+    decoded_reg16_wr_lo : out std_logic;
+
+    decoded_reg16_hi    : out std_logic_vector(3 downto 0);
+    decoded_reg16_wr_hi : out std_logic
 
     );
 end NanoBrainInstructionDecoder;
@@ -54,6 +60,12 @@ begin
     decoded_fpu_op <= FPUOP_NOP;
     decoded_io_op  <= IO_NOP;
     decoded_fc_op  <= FC_NOP;
+
+    decoded_reg16_lo    <= (others => '0');
+    decoded_reg16_wr_lo <= '0';
+
+    decoded_reg16_hi    <= (others => '0');
+    decoded_reg16_wr_hi <= '0';
 
     x_sel <= "00";
     y_sel <= "00";
@@ -172,8 +184,8 @@ begin
                 decoded_ipu_op <= IPUOP_SL1;
               when "0100" =>
                 decoded_ipu_op <= IPUOP_RL;
-				  when others =>
-					 decoded_ipu_op <= IPUOP_NOP;
+              when others =>
+                decoded_ipu_op <= IPUOP_NOP;
             end case;
           -- ALU  IP sra rx            | 01  111100 xxxx  0000
           -- ALU  IP srx rx            | 01  111100 xxxx  0001
@@ -195,8 +207,8 @@ begin
                 decoded_ipu_op <= IPUOP_SR1;
               when "0100" =>
                 decoded_ipu_op <= IPUOP_RR;
-				  when others =>
-					 decoded_ipu_op <= IPUOP_NOP;
+              when others =>
+                decoded_ipu_op <= IPUOP_NOP;
             end case;
           -- ALU IP cmp rx, ry         | 01  000010 xxxx  yyyy
           when "000010" =>
@@ -224,16 +236,22 @@ begin
             decoded_ipu_op <= IPUOP_TEST;
           -- ALU IP load rx, ry        | 01  001010 xxxx  yyyy
           when "001010" =>
-            decoded_op     <= OP_IPU;
-            x_sel          <= "01";
-            y_sel          <= "01";
-            decoded_ipu_op <= IPUOP_LOAD;
+            decoded_op          <= OP_IPU;
+            x_sel               <= "01";
+            y_sel               <= "01";
+            decoded_ipu_op      <= IPUOP_LOAD;
+            decoded_reg16_wr_lo <= '1';
+            decoded_reg16_lo    <= i(7 downto 4);
+
           -- ALU IP load rx, bbb       | 01  101010 xxxx  bbbb
           when "101010" =>
-            decoded_op     <= OP_IPU;
-            x_sel          <= "01";
-            y_sel          <= "10";
-            decoded_ipu_op <= IPUOP_LOAD;
+            decoded_op          <= OP_IPU;
+            x_sel               <= "01";
+            y_sel               <= "10";
+            decoded_ipu_op      <= IPUOP_LOAD;
+            decoded_reg16_wr_lo <= '1';
+            decoded_reg16_lo    <= i(7 downto 4);
+
           -- ALU IP mul rx, ry         | 01  000110 0xxx  yyyy
           when "000110" =>
             decoded_op     <= OP_IPU;
@@ -342,8 +360,8 @@ begin
           -- ALU C sleep               | 01  001111 0000  0000 
           when "001111" =>
             decoded_op <= OP_SLEEP;
-			 when others =>
-				decoded_op <= OP_NOP;
+          when others =>
+            decoded_op <= OP_NOP;
         end case;
       when "10" =>                      -- fc
         decoded_op <= OP_FC;
@@ -451,67 +469,29 @@ begin
         end case;
       when "11" =>                      -- io
         decoded_op <= OP_IO;
-      --if i(13) = '0' then
-      --  case i(12 downto 10) is
-      --    -- IO   NA ldw r0/r1, ccc    | 11  0 000  x  c  c  c  c  c  c  c  c  c  |
-      --    when "0000" =>
-      --      c_sel         <= '1';
-      --      iox_sel       <= "01";
-      --      decoded_io_op <= IO_LDW;
-      --    -- IO   NA ldw rx, [IDy + 2b]| 11  0 001  x  x  x  x  y  y  b  b  b  b  | 
-      --    when "0001" =>
-      --      iox_sel       <= "00";
-      --      ioy_sel       <= "01";
-      --      iob_sel       <= '1';
-      --      decoded_io_op <= IO_LDW_IND;
-      --    -- IO   NA ldspr rx:rx+1,SPRy| 11  0 010  xxx 000 yyyy  | 
-      --    -- IO   NA incpr  IDy        | 11  0 010  000 010 00yy  | 
-      --    -- IO   NA decpr  IDy        | 11  0 010  000 011 00yy  | 
-      --    when "0010" =>
-      --      case i(6 downto 4) is
-      --        when "000" =>
-      --          iox_sel       <= "11";
-      --          ioy_sel       <= "10";
-      --          decoded_io_op <= IO_LDSPR;
-      --        when "010" =>
-      --          iox_sel       <= "00";
-      --          ioy_sel       <= "11";
-      --          decoded_io_op <= IO_LDSPR;
-      --        when "011" =>
-      --          iox_sel       <= "00";
-      --          ioy_sel       <= "11";
-      --          decoded_io_op <= IO_LDSPR;
-      --        when others =>
-      --      end case;
-      --    -- IO   NA ldpid             | 11  0 011  00  xxxx  0000  | 
-      --    -- IO   NA ldtlb             | 11  0 011  10  xxx  ddddd  | 
-      --    -- IO   NA mbar              | 11  0 011  11  0000  bbbb  |
-      --    when "0011" =>
-      --      case i(9 downto 8) is
-      --        when "00" =>
-      --          decoded_io_op <= IO_LDPID;
-      --        when "10" =>
-      --          decoded_io_op <= IO_LDTLB;
-      --        when "11" =>
-      --          decoded_io_op <= IO_LDSPR;
-      --      end case;
-      --    -- IO   NA stw r0/r1, ccc    | 11  0 100  x  c  c  c  c  c  c  c  c  c  |  
-      --    when "0100" =>
-      --      decoded_io_op <= IO_STW;
-      --    -- IO   NA stw rx, [IDy + 2b]| 11  0 101  x  x  x  x  y  y  b  b  b  b  | 
-      --    when "0101" =>
-      --      decoded_io_op <= IO_STW_IND;
-      --    -- IO   NA stspr rx:rx+1,SPRy| 11  0 110  x  x  x  0  0  0  y  y  y  y  | 
-      --    when "0110" =>
-      --      decoded_io_op <= IO_STSPR;
-      --    -- IO   NA cmpxchg           | 11  0 111  x  x  x  x  y  y  y  y  z  z  | 
-      --    when "0111" =>
-      --      decoded_io_op <= IO_CMPXCHG;
-      --    when others =>
-      --  end case;
-      --else
-      ---- could decode lots of instructions here
-      --end if;
+
+        case i(13 downto 10) is
+          when "1111" =>
+            case i(9 downto 8) is
+              --  IO  NA  out rx, py        | 1  1  1  1  1  1  0  0  x  x  x  x  y  y  y  y  |
+              when "00" =>
+                decoded_io_op <= IO_OUT;
+                x_sel <= "01";
+                y_sel <= "01";
+              -- IO  NA  in  rx, py        | 1  1  1  1  1  1  0  1  x  x  x  x  y  y  y  y  |
+              when "01" =>
+                decoded_io_op <= IO_IN;
+                x_sel <= "01";
+                y_sel <= "01";
+                decoded_reg16_wr_lo <= '1';
+                decoded_reg16_lo <= i(7 downto 4);
+              when others =>
+            end case;
+              
+          when others =>
+         
+        end case;
+
       when others =>
     end case;
   end process;

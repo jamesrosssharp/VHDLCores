@@ -75,6 +75,14 @@ entity NanoBrain is
     d_n_rd       : out std_logic;
     d_n_wr       : out std_logic;
 
+    -- port bus connection
+
+    port_address : out std_logic_vector(15 downto 0);
+    port_wr_data : out std_logic_vector(15 downto 0);
+    port_rd_data : in  std_logic_vector(15 downto 0);
+    port_n_rd    : out std_logic;
+    port_n_wr    : out std_logic;
+
     -- interrupt
 
     interrupt : in std_logic
@@ -121,7 +129,15 @@ architecture RTL of NanoBrain is
       d_wr_done    : in  std_logic;
       d_n_rd       : out std_logic;
       d_n_wr       : out std_logic;
-      interrupt    : in  std_logic
+
+      -- port bus
+      port_address : out std_logic_vector(15 downto 0);
+      port_wr_data : out std_logic_vector(15 downto 0);
+      port_rd_data : in  std_logic_vector(15 downto 0);
+      port_n_rd    : out std_logic;
+      port_n_wr    : out std_logic;
+
+      interrupt : in std_logic
       );
   end component;
 
@@ -164,7 +180,13 @@ begin
       d_wr_done    => d_wr_done,
       d_n_rd       => d_n_rd,
       d_n_wr       => d_n_wr,
-      interrupt    => interrupt
+      port_address => port_address,
+      port_wr_data => port_wr_data,
+      port_rd_data => port_rd_data,
+      port_n_rd    => port_n_rd,
+      port_n_wr    => port_n_wr,
+
+      interrupt => interrupt
       );
 
 end RTL;

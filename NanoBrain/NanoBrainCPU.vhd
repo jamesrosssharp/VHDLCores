@@ -77,6 +77,14 @@ package NanoBrainCPU is
       d_n_rd       : out std_logic;
       d_n_wr       : out std_logic;
 
+      -- port bus connection
+
+      port_address : out std_logic_vector(15 downto 0);
+      port_wr_data : out std_logic_vector(15 downto 0);
+      port_rd_data : in  std_logic_vector(15 downto 0);
+      port_n_rd    : out std_logic;
+      port_n_wr    : out std_logic;
+
       -- interrupt
 
       interrupt : in std_logic

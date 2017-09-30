@@ -99,7 +99,14 @@ entity NanoBrainSingleIssueInstructionPipeline is
     bs_result    : in  std_logic_vector(15 downto 0);
     bs_C_in      : out std_logic;
     bs_C_out     : in  std_logic;
-    bs_op        : out BS_Op
+    bs_op        : out BS_Op;
+
+    -- connection to port bus
+    port_address : out std_logic_vector(15 downto 0);
+    port_wr_data : out std_logic_vector(15 downto 0);
+    port_rd_data : in  std_logic_vector(15 downto 0);
+    port_n_rd    : out std_logic;
+    port_n_wr    : out std_logic
     );
 end NanoBrainSingleIssueInstructionPipeline;
 
@@ -126,7 +133,13 @@ architecture RTL of NanoBrainSingleIssueInstructionPipeline is
       decoded_bs_op        : out work.NanoBrainInternal.BS_Op;
       decoded_fpu_op       : out work.NanoBrainInternal.FPU_Op;
       decoded_fc_op        : out work.NanoBrainInternal.FC_Op;
-      decoded_io_op        : out work.NanoBrainInternal.IO_Op
+      decoded_io_op        : out work.NanoBrainInternal.IO_Op;
+
+      decoded_reg16_lo    : out std_logic_vector(3 downto 0);
+      decoded_reg16_wr_lo : out std_logic;
+
+      decoded_reg16_hi    : out std_logic_vector(3 downto 0);
+      decoded_reg16_wr_hi : out std_logic
 
       );
   end component;
@@ -185,17 +198,17 @@ architecture RTL of NanoBrainSingleIssueInstructionPipeline is
 
   -- pipeline stage 1 (fetch 1) signals
 
-  signal stage_1_pc, stage_1_pc_next                         : address_t;
-  signal stage_1_halt                                        : std_logic;
-  signal stage_1_stall                                       : std_logic;
-  signal stage_1_icache_portsel									    : std_logic;
+  signal stage_1_pc, stage_1_pc_next : address_t;
+  signal stage_1_halt                : std_logic;
+  signal stage_1_stall               : std_logic;
+  signal stage_1_icache_portsel      : std_logic;
 
   -- pipeline stage 2 (decode) signals
 
   signal stage_2_halt                                  : std_logic;
   signal stage_2_stall                                 : std_logic;
   signal stage_2_instruction, stage_2_instruction_next : instruction_t;
-  signal stage_2_pc, stage_2_pc_next                    : address_t;
+  signal stage_2_pc, stage_2_pc_next                   : address_t;
 
   -- pipeline stage 3 (execute) signals
 
@@ -223,8 +236,10 @@ architecture RTL of NanoBrainSingleIssueInstructionPipeline is
   signal stage_3_fpu_operand_x, stage_3_fpu_operand_x_next, decoded_operand_fx : std_logic_vector(31 downto 0);
   signal stage_3_fpu_operand_y, stage_3_fpu_operand_y_next, decoded_operand_fy : std_logic_vector(31 downto 0);
 
-  signal stage_3_reg16_dest_lo, stage_3_reg16_dest_lo_next, decoded_reg16_dest_lo : std_logic_vector(15 downto 0);
-  signal stage_3_reg16_dest_hi, stage_3_reg16_dest_hi_next, decoded_reg16_dest_hi : std_logic_vector(15 downto 0);
+  signal stage_3_reg16_dest_lo, stage_3_reg16_dest_lo_next, decoded_reg16_dest_lo : std_logic_vector(3 downto 0);
+  signal stage_3_reg16_dest_hi, stage_3_reg16_dest_hi_next, decoded_reg16_dest_hi : std_logic_vector(3 downto 0);
+  signal stage_3_reg16_wr_lo, stage_3_reg16_wr_lo_next, decoded_reg16_wr_lo       : std_logic;
+  signal stage_3_reg16_wr_hi, stage_3_reg16_wr_hi_next, decoded_reg16_wr_hi       : std_logic;
 
   signal stage_3_jump_target, stage_3_jump_target_next, decoded_jump_target : std_logic_vector(22 downto 0);
 
@@ -236,10 +251,43 @@ architecture RTL of NanoBrainSingleIssueInstructionPipeline is
   signal stage_4_halt  : std_logic;
   signal stage_4_stall : std_logic;
 
+  signal stage_4_result_lo, stage_4_result_lo_next         : std_logic_vector(15 downto 0);
+  signal stage_4_result_hi, stage_4_result_hi_next         : std_logic_vector(15 downto 0);
+  signal stage_4_reg16_dest_lo, stage_4_reg16_dest_lo_next : std_logic_vector(3 downto 0);
+  signal stage_4_reg16_dest_hi, stage_4_reg16_dest_hi_next : std_logic_vector(3 downto 0);
+  signal stage_4_reg16_wr_lo, stage_4_reg16_wr_lo_next     : std_logic;
+  signal stage_4_reg16_wr_hi, stage_4_reg16_wr_hi_next     : std_logic;
+
+  signal stage_4_mem_rd, stage_4_mem_rd_next                   : std_logic;
+  signal stage_4_mem_wr, stage_4_mem_wr_next                   : std_logic;
+  signal stage_4_mem_address, stage_4_mem_address_next         : address_t;
+  signal stage_4_dcache_port_sel, stage_4_dcache_port_sel_next : std_logic;
+
   -- pipeline stage 5 (memory access 1) signals
 
   signal stage_5_halt  : std_logic;
   signal stage_5_stall : std_logic;
+
+  signal stage_5_result_lo, stage_5_result_lo_next         : std_logic_vector(15 downto 0);
+  signal stage_5_result_hi, stage_5_result_hi_next         : std_logic_vector(15 downto 0);
+  signal stage_5_reg16_dest_lo, stage_5_reg16_dest_lo_next : std_logic_vector(3 downto 0);
+  signal stage_5_reg16_dest_hi, stage_5_reg16_dest_hi_next : std_logic_vector(3 downto 0);
+  signal stage_5_reg16_wr_lo, stage_5_reg16_wr_lo_next     : std_logic;
+  signal stage_5_reg16_wr_hi, stage_5_reg16_wr_hi_next     : std_logic;
+
+  signal stage_5_mem_rd, stage_5_mem_rd_next                   : std_logic;
+  signal stage_5_mem_wr, stage_5_mem_wr_next                   : std_logic;
+  signal stage_5_mem_address, stage_5_mem_address_next         : address_t;
+  signal stage_5_dcache_port_sel, stage_5_dcache_port_sel_next : std_logic;
+
+  -- pipeline stage 6 (register write back signals)
+
+  signal stage_6_result_lo, stage_6_result_lo_next         : std_logic_vector(15 downto 0);
+  signal stage_6_result_hi, stage_6_result_hi_next         : std_logic_vector(15 downto 0);
+  signal stage_6_reg16_dest_lo, stage_6_reg16_dest_lo_next : std_logic_vector(3 downto 0);
+  signal stage_6_reg16_dest_hi, stage_6_reg16_dest_hi_next : std_logic_vector(3 downto 0);
+  signal stage_6_reg16_wr_lo, stage_6_reg16_wr_lo_next     : std_logic;
+  signal stage_6_reg16_wr_hi, stage_6_reg16_wr_hi_next     : std_logic;
 
   -- registers
 
@@ -262,6 +310,11 @@ architecture RTL of NanoBrainSingleIssueInstructionPipeline is
   signal reg32_write_data : reg32_t;
   signal wr_reg32         : std_logic;
 
+  -- flags
+
+  signal C, C_next : std_logic;
+  signal Z, Z_next : std_logic;
+
 begin
 
   -- component instantiations
@@ -282,8 +335,24 @@ begin
       decoded_bs_op        => decoded_bs_op,
       decoded_fpu_op       => decoded_fpu_op,
       decoded_fc_op        => decoded_fc_op,
-      decoded_io_op        => decoded_io_op
+      decoded_io_op        => decoded_io_op,
+
+      decoded_reg16_lo    => decoded_reg16_dest_lo,
+      decoded_reg16_wr_lo => decoded_reg16_wr_lo,
+
+      decoded_reg16_hi    => decoded_reg16_dest_hi,
+      decoded_reg16_wr_hi => decoded_reg16_wr_hi
+
       );
+
+  -- mapping to ipu
+
+  ipu_operand_x <= stage_3_ipu_operand_x;
+  ipu_operand_y <= stage_3_ipu_operand_y;
+  ipu_operand_z <= stage_3_ipu_operand_z;
+  ipu_C_in      <= C;
+  ipu_Z_in      <= Z;
+  ipu_op        <= stage_3_ipu_op;
 
   -- synchronous transitions
 
@@ -298,13 +367,16 @@ begin
       imm_reg <= (others => '0');
 
       stage_0_icache_portsel <= '0';
-      
-		stage_1_pc <= (others => '0');
-		stage_2_pc <= (others => '0');
+
+      stage_1_pc <= (others => '0');
+      stage_2_pc <= (others => '0');
 
       -- on reset, flush pipeline and branch to 0x000000
       flush_pipeline <= '1';
       branch_target  <= (others => '0');
+
+      C <= '0';
+      Z <= '0';
 
     elsif rising_edge(clk) then
 
@@ -325,9 +397,9 @@ begin
       end if;
 
       stage_0_icache_portsel <= stage_0_icache_portsel_next;
-    	
-		stage_1_pc <= stage_1_pc_next;
-		stage_2_pc <= stage_2_pc_next;
+
+      stage_1_pc <= stage_1_pc_next;
+      stage_2_pc <= stage_2_pc_next;
 
       stage_3_ipu_op <= stage_3_ipu_op_next;
       stage_3_fpu_op <= stage_3_fpu_op_next;
@@ -343,10 +415,37 @@ begin
       stage_3_fpu_operand_y <= stage_3_fpu_operand_y_next;
       stage_3_reg16_dest_lo <= stage_3_reg16_dest_lo_next;
       stage_3_reg16_dest_hi <= stage_3_reg16_dest_hi_next;
+      stage_3_reg16_wr_lo   <= stage_3_reg16_wr_lo_next;
+      stage_3_reg16_wr_hi   <= stage_3_reg16_wr_hi_next;
       stage_3_jump_target   <= stage_3_jump_target_next;
+
+      stage_4_result_lo     <= stage_4_result_lo_next;
+      stage_4_result_hi     <= stage_4_result_hi_next;
+      stage_4_reg16_dest_lo <= stage_4_reg16_dest_lo_next;
+      stage_4_reg16_dest_hi <= stage_4_reg16_dest_hi_next;
+      stage_4_reg16_wr_lo   <= stage_4_reg16_wr_lo_next;
+      stage_4_reg16_wr_hi   <= stage_4_reg16_wr_hi_next;
+
+      stage_5_result_lo     <= stage_5_result_lo_next;
+      stage_5_result_hi     <= stage_5_result_hi_next;
+      stage_5_reg16_dest_lo <= stage_5_reg16_dest_lo_next;
+      stage_5_reg16_dest_hi <= stage_5_reg16_dest_hi_next;
+      stage_5_reg16_wr_lo   <= stage_5_reg16_wr_lo_next;
+      stage_5_reg16_wr_hi   <= stage_5_reg16_wr_hi_next;
+
+      stage_6_result_lo     <= stage_6_result_lo_next;
+      stage_6_result_hi     <= stage_6_result_hi_next;
+      stage_6_reg16_dest_lo <= stage_6_reg16_dest_lo_next;
+      stage_6_reg16_dest_hi <= stage_6_reg16_dest_hi_next;
+      stage_6_reg16_wr_lo   <= stage_6_reg16_wr_lo_next;
+      stage_6_reg16_wr_hi   <= stage_6_reg16_wr_hi_next;
+
 
       flush_pipeline <= flush_pipeline_next;
       branch_target  <= branch_target_next;
+
+      C <= C_next;
+      Z <= Z_next;
 
     end if;
   end process;
@@ -357,12 +456,12 @@ begin
   process (decoded_x_sel, decoded_y_sel, decoded_z_sel,
            decoded_u_sel, decoded_v_sel, decoded_c_sel,
            stage_2_instruction, stage_2_pc, reg16_bank,
-			  reg32_bank, imm_reg, branch_target, stage_1_halt,
-			  stage_1_icache_portsel, stage_1_pc, icache_rd_ready_b,
-			  stage_2_stall, stage_2_halt, decoded_ipu_op, decoded_op,
-			  decoded_operand_x, decoded_operand_y, decoded_operand_z,
-			  decoded_operand_fx, decoded_operand_fy, decoded_reg16_dest_lo,
-			  decoded_reg16_dest_hi, decoded_jump_target)
+           reg32_bank, imm_reg, branch_target, stage_1_halt,
+           stage_1_icache_portsel, stage_1_pc, icache_rd_ready_b,
+           stage_2_stall, stage_2_halt, decoded_ipu_op, decoded_op,
+           decoded_operand_x, decoded_operand_y, decoded_operand_z,
+           decoded_operand_fx, decoded_operand_fy, decoded_reg16_dest_lo,
+           decoded_reg16_dest_hi, decoded_jump_target)
     variable i             : instruction_t;
     variable idx           : std_logic_vector(3 downto 0);
     variable jump_target   : std_logic_vector(22 downto 0);
@@ -381,7 +480,7 @@ begin
 
     case decoded_y_sel is
       when "01" =>
-        decoded_operand_y <= reg16_bank(to_integer(unsigned(i(3 downto 0) & '0')));
+        decoded_operand_y <= reg16_bank(to_integer(unsigned(i(3 downto 0))));
       when "10" =>
         decoded_operand_y <= imm_reg(11 downto 0) & i(3 downto 0);
       when others =>
@@ -392,7 +491,7 @@ begin
       when '1' =>
         decoded_operand_z <= reg16_bank(to_integer(unsigned(i(3 downto 0) & '1')));
       when others =>
-			decoded_operand_z <= (others => '0');
+        decoded_operand_z <= (others => '0');
     end case;
 
     case decoded_u_sel is
@@ -400,7 +499,7 @@ begin
         idx                := "11" & i(3 downto 2);
         decoded_operand_fx <= reg32_bank(to_integer(unsigned(idx)));
       when others =>
-		  decoded_operand_fx <= (others => '0');
+        decoded_operand_fx <= (others => '0');
     end case;
 
     case decoded_v_sel is
@@ -408,7 +507,7 @@ begin
         idx                := "11" & i(1 downto 0);
         decoded_operand_fy <= reg32_bank(to_integer(unsigned(idx)));
       when others =>
-		  decoded_operand_fy <= (others => '0');
+        decoded_operand_fy <= (others => '0');
     end case;
 
     case decoded_c_sel is
@@ -429,10 +528,8 @@ begin
   end process;
 
 
-  -- instruction execution
-
-
-
+  -- instruction execution 
+ 
   -- memory access
 
 
@@ -442,33 +539,67 @@ begin
 
 
   -- main state machine
-  
+
   stage_0_halt <= stage_1_stall or stage_1_halt;
   stage_1_halt <= stage_2_stall or stage_2_halt;
   stage_2_halt <= stage_3_stall or stage_3_halt;
   stage_3_halt <= stage_4_stall or stage_4_halt;
   stage_4_halt <= stage_5_stall or stage_5_halt;
-  
+
   stage_1_icache_portsel <= not stage_0_icache_portsel;
-  
+
   process (pc, flush_pipeline, stage_0_halt, stage_0_icache_portsel,
-				branch_target, stage_1_halt, stage_1_pc,
-				icache_rd_ready_a, icache_rd_data_a, icache_rd_ready_b, 
-				icache_rd_data_b, stage_2_stall, stage_2_halt, decoded_ipu_op,
-				decoded_bs_op, decoded_op, decoded_fc_op, decoded_io_op,
-				decoded_operand_x, decoded_operand_y, decoded_operand_fx,
-				decoded_operand_fy, decoded_reg16_dest_lo, decoded_reg16_dest_hi,
-				decoded_jump_target, decoded_fpu_op, decoded_operand_z)
+           stage_1_icache_portsel,
+           branch_target, stage_1_halt, stage_1_pc,
+           icache_rd_ready_a, icache_rd_data_a, icache_rd_ready_b,
+           icache_rd_data_b, stage_2_stall, stage_2_halt, decoded_ipu_op,
+           decoded_bs_op, decoded_op, decoded_fc_op, decoded_io_op,
+           decoded_operand_x, decoded_operand_y, decoded_operand_fx,
+           decoded_operand_fy, decoded_reg16_dest_lo, decoded_reg16_dest_hi,
+           decoded_jump_target, decoded_fpu_op, decoded_operand_z,
+           decoded_reg16_wr_lo, decoded_reg16_wr_hi,
+           stage_3_ipu_op, stage_3_fpu_op, stage_3_bs_op, stage_3_op,
+           stage_3_fc_op, stage_3_io_op, stage_3_ipu_operand_x, stage_3_ipu_operand_y,
+           stage_3_ipu_operand_z, stage_3_fpu_operand_x, stage_3_fpu_operand_y,
+           stage_3_reg16_dest_lo, stage_3_reg16_dest_hi, stage_3_jump_target,
+           stage_3_reg16_wr_lo, stage_3_reg16_wr_hi,
+           ipu_result_lo,
+           ipu_result_hi,
+           ipu_C_out,
+           ipu_Z_out,
+           stage_4_result_lo,
+           stage_4_result_hi,
+           stage_4_reg16_dest_lo,
+           stage_4_reg16_dest_hi,
+           stage_4_reg16_wr_lo,
+           stage_4_reg16_wr_hi,
+           stage_5_result_lo,
+           stage_5_result_hi,
+           stage_5_reg16_dest_lo,
+           stage_5_reg16_dest_hi,
+           stage_5_reg16_wr_lo,
+           stage_5_reg16_wr_hi,
+           stage_6_result_lo,
+           stage_6_reg16_dest_lo,
+           stage_6_reg16_wr_lo,
+           stage_6_result_hi,
+           stage_6_reg16_dest_hi,
+           stage_6_reg16_wr_hi,
+           C, Z,
+			  imm_reg,
+			  decoded_imm_reg_next,
+			  ipu_busy,
+			  port_rd_data
+           )
   begin
 
-	flush_pipeline_next <= '0';
-	stage_1_stall <= '0';
-	stage_2_stall <= '0';
-	stage_3_stall <= '0';
-	stage_4_stall <= '0';
-	stage_5_stall <= '0';
-	
-  
+    flush_pipeline_next <= '0';
+    stage_1_stall       <= '0';
+    stage_2_stall       <= '0';
+    stage_3_stall       <= '0';
+    stage_4_stall       <= '0';
+    stage_5_stall       <= '0';
+
     -- pc next
 
     if flush_pipeline = '1' then
@@ -505,9 +636,6 @@ begin
 
     -- stage 1
 
-    stage_1_stall <= '0';
-
-    
     if flush_pipeline = '1' then
       stage_2_instruction_next <= NOP_INSTRUCTION;
       stage_2_pc_next          <= (others => '0');
@@ -523,7 +651,7 @@ begin
         else
           stage_2_instruction_next <= NOP_INSTRUCTION;
           stage_2_pc_next          <= (others => '0');
-          stage_1_stall             <= '1';
+          stage_1_stall            <= '1';
         end if;
 
       else
@@ -535,14 +663,14 @@ begin
           stage_2_pc_next          <= stage_1_pc;
         else
           stage_2_instruction_next <= NOP_INSTRUCTION;
-          stage_1_stall             <= '1';
+          stage_1_stall            <= '1';
           stage_2_pc_next          <= (others => '0');
         end if;
 
       end if;
     end if;
 
-    -- stage 2
+    -- stage 2 (decode)
 
     if flush_pipeline = '1' or stage_2_stall = '1' then
 
@@ -562,7 +690,11 @@ begin
       stage_3_fpu_operand_y_next <= (others => '0');
       stage_3_reg16_dest_lo_next <= (others => '0');
       stage_3_reg16_dest_hi_next <= (others => '0');
-      stage_3_jump_target_next   <= (others => '0');
+      stage_3_reg16_wr_lo_next <= '0';
+		stage_3_reg16_wr_hi_next <= '0';
+		stage_3_jump_target_next   <= (others => '0');
+
+      imm_reg_next <= (others => '0');
 
     elsif stage_2_halt = '1' then
 
@@ -583,6 +715,10 @@ begin
       stage_3_reg16_dest_lo_next <= stage_3_reg16_dest_lo;
       stage_3_reg16_dest_hi_next <= stage_3_reg16_dest_hi;
       stage_3_jump_target_next   <= stage_3_jump_target;
+      stage_3_reg16_wr_lo_next   <= stage_3_reg16_wr_lo;
+      stage_3_reg16_wr_hi_next   <= stage_3_reg16_wr_hi;
+
+      imm_reg_next <= imm_reg;
 
     else
 
@@ -604,8 +740,113 @@ begin
       stage_3_reg16_dest_hi_next <= decoded_reg16_dest_hi;
       stage_3_jump_target_next   <= decoded_jump_target;
 
+      stage_3_reg16_wr_lo_next <= decoded_reg16_wr_lo;
+      stage_3_reg16_wr_hi_next <= decoded_reg16_wr_hi;
+
+      imm_reg_next <= decoded_imm_reg_next;
+
     end if;
 
+    -- stage 3 (execute)
+
+    -- default is stall behvaiour
+    stage_4_result_lo_next     <= stage_4_result_lo;
+    stage_4_result_hi_next     <= stage_4_result_hi;
+    stage_4_reg16_dest_lo_next <= stage_4_reg16_dest_lo;
+    stage_4_reg16_dest_hi_next <= stage_4_reg16_dest_hi;
+    stage_4_reg16_wr_lo_next   <= stage_4_reg16_wr_lo;
+    stage_4_reg16_wr_hi_next   <= stage_4_reg16_wr_hi;
+
+    port_address <= (others => '0');
+    port_wr_data <= (others => '0');
+    port_n_wr    <= '1';
+    port_n_rd    <= '1';
+    
+    C_next <= C;
+    Z_next <= Z;
+
+    case stage_3_op is
+      when OP_IPU =>
+
+        if ipu_busy = '1' then
+
+          stage_3_stall <= '1';
+
+        else
+
+          stage_4_result_lo_next     <= ipu_result_lo;
+          stage_4_result_hi_next     <= ipu_result_hi;
+          stage_4_reg16_dest_lo_next <= stage_3_reg16_dest_lo;
+          stage_4_reg16_dest_hi_next <= stage_3_reg16_dest_hi;
+          stage_4_reg16_wr_lo_next   <= stage_3_reg16_wr_lo;
+          stage_4_reg16_wr_hi_next   <= stage_3_reg16_wr_hi;
+
+          C_next <= ipu_C_out;
+          Z_next <= ipu_Z_out;
+
+        end if;
+
+      when OP_IO =>
+
+        case stage_3_io_op is
+          when IO_IN =>
+
+            port_n_rd <= '0';
+            port_address <= stage_3_ipu_operand_y;
+
+            stage_4_result_lo_next     <= port_rd_data;
+            stage_4_reg16_dest_lo_next <= stage_3_reg16_dest_lo;
+            stage_4_reg16_wr_lo_next   <= stage_3_reg16_wr_lo;
+         
+          when IO_OUT =>
+
+            port_n_wr <= '0';
+            port_address <= stage_3_ipu_operand_y;
+            port_wr_data <= stage_3_ipu_operand_x;
+
+          when others =>
+        end case;
+        
+      when others =>                    -- OP_NOP
+
+        stage_4_result_lo_next     <= ipu_result_lo;
+        stage_4_result_hi_next     <= ipu_result_hi;
+        stage_4_reg16_dest_lo_next <= stage_3_reg16_dest_lo;
+        stage_4_reg16_dest_hi_next <= stage_3_reg16_dest_hi;
+        stage_4_reg16_wr_lo_next   <= '0';
+        stage_4_reg16_wr_hi_next   <= '0';
+
+        C_next <= C;
+        Z_next <= Z;
+
+    end case;
+
+    -- stage 4 (memory 0)
+
+    stage_5_result_lo_next     <= stage_4_result_lo;
+    stage_5_result_hi_next     <= stage_4_result_hi;
+    stage_5_reg16_dest_lo_next <= stage_4_reg16_dest_lo;
+    stage_5_reg16_dest_hi_next <= stage_4_reg16_dest_hi;
+    stage_5_reg16_wr_lo_next   <= stage_4_reg16_wr_lo;
+    stage_5_reg16_wr_hi_next   <= stage_4_reg16_wr_hi;
+
+    -- stage 5 (memory 1)
+
+    stage_6_result_lo_next     <= stage_5_result_lo;
+    stage_6_result_hi_next     <= stage_5_result_hi;
+    stage_6_reg16_dest_lo_next <= stage_5_reg16_dest_lo;
+    stage_6_reg16_dest_hi_next <= stage_5_reg16_dest_hi;
+    stage_6_reg16_wr_lo_next   <= stage_5_reg16_wr_lo;
+    stage_6_reg16_wr_hi_next   <= stage_5_reg16_wr_hi;
+
+    -- stage 6 (reg writeback)
+
+    reg16_write_data_a <= stage_6_result_lo;
+    reg16_write_idx_a  <= unsigned(stage_6_reg16_dest_lo);
+    wr_reg16_a         <= stage_6_reg16_wr_lo;
+    reg16_write_data_b <= stage_6_result_hi;
+    reg16_write_idx_b  <= unsigned(stage_6_reg16_dest_hi);
+    wr_reg16_b         <= stage_6_reg16_wr_hi;
 
   end process;
 
