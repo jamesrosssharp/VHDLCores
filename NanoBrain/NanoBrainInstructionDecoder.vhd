@@ -37,7 +37,9 @@ entity NanoBrainInstructionDecoder is
     decoded_reg16_wr_lo : out std_logic;
 
     decoded_reg16_hi    : out std_logic_vector(3 downto 0);
-    decoded_reg16_wr_hi : out std_logic
+    decoded_reg16_wr_hi : out std_logic;
+	 
+	 imm : in std_logic_vector(15 downto 0)
 
     );
 end NanoBrainInstructionDecoder;
@@ -45,7 +47,7 @@ end NanoBrainInstructionDecoder;
 architecture RTL of NanoBrainInstructionDecoder is
 begin
 
-  process (stage_2_instruction, stage_2_pc)
+  process (stage_2_instruction, stage_2_pc, imm)
     variable i : instruction_t;
   begin
 
@@ -357,6 +359,8 @@ begin
           -- ALU C nop                 | 01  000111 0000  0000
           when "000111" =>
             decoded_op <= OP_NOP;
+				-- when nop, preserve imm register
+				decoded_imm_reg_next <= imm;
           -- ALU C sleep               | 01  001111 0000  0000 
           when "001111" =>
             decoded_op <= OP_SLEEP;
